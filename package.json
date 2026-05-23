@@ -1,0 +1,23 @@
+{
+  "name": "localfirst-ai",
+  "version": "0.1.0",
+  "description": "Local-first AI assistant — run LLM-generated analysis formulas in a sandboxed iframe, with datasets and proxied API access",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.2"
+  }
+}
