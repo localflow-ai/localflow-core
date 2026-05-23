@@ -1,6 +1,6 @@
-# LocalFlow — Local-first AI Assistant
+# LocalFlow Core — Local-first AI Library
 
-> **[→ Try the live demonstrator](https://apps.daquota.io/localflow/)** &nbsp;·&nbsp; **MIT License** — See [LICENSE](#license) at the bottom of this file.
+> **Apache 2.0 License** — See [LICENSE](#license) at the bottom of this file.
 
 ---
 
@@ -19,7 +19,7 @@ The same principle extends to RAG and semantic querying: queries and retrieval c
 
 ### Transparent two-step process
 
-Code generation (step 1) and local execution (step 2) are invisible to the user — the assistant behaves like a regular AI assistant. The difference is that **generated analyses can be saved and re-run** on any compatible dataset without making another LLM call. The demonstrator app includes a **catalog** for exactly this: save an analysis once, execute it locally as many times as needed.
+Code generation (step 1) and local execution (step 2) are invisible to the user — the assistant behaves like a regular AI assistant. The difference is that **generated analyses can be saved and re-run** on any compatible dataset without making another LLM call.
 
 ### Key properties
 
@@ -28,7 +28,7 @@ Code generation (step 1) and local execution (step 2) are invisible to the user 
 3. **No hallucinated results** — the human-in-the-loop process means outputs are computed from real data by deterministic code, not inferred by the model
 4. **Scalable** — once generated, run the same analysis on large datasets as many times as needed, consuming no additional AI tokens
 5. **Explainable** — the generated code is fully inspectable; any AI can explain why a formula works or debug why it fails
-6. **Green and sustainable** — by using AI only in the code-generation phase, Local-First AI reduces dependence on heavy inference infrastructure. Running analyses locally means fewer round-trips to AI datacenters, whose energy footprint is a growing environmental concern
+6. **Green and sustainable** — by using AI only in the code-generation phase, Local-First AI reduces dependence on heavy inference infrastructure
 
 > 📄 For a deeper dive into the Local-First AI concepts, read the [LocalFlow white paper](https://localflow.fr/LocalFlow%20-%20white%20paper%20-%20en.pdf).
 
@@ -79,22 +79,20 @@ Code generation (step 1) and local execution (step 2) are invisible to the user 
 
 | Path | Role |
 |------|------|
-| `localfirst-ai-lib/` | **`LocalAssistant` class** — the reusable library. Framework-agnostic, no UI dependencies. Published as `localfirst-ai`. |
-| `localflow-app/` | **Demonstrator app** — a React + Vite application that embeds `LocalAssistant` and shows a full data-analysis workflow: file/CRM loading, conversation panel, analysis catalog, semantic catalog matching. |
-
-The two packages are kept separate so that `localfirst-ai-lib/` can be published as an independent npm package and embedded in any framework.
+| `localflow-core/` | **`LocalAssistant` class** — this reusable library. Framework-agnostic, no UI dependencies. Published as `localflow-core`. |
+| `localflow-app/` | **Demonstrator app** — a React + Vite application. See [localflow-app README](../localflow-app/README.md). |
 
 ---
 
 ## Quick start — embedding `LocalAssistant` in your app
 
-### 1. Install dependencies
+### 1. Install
 
 ```bash
-npm install   # from the repo root — installs both workspaces
+npm install localflow-core
 ```
 
-> Until the package is published to npm, reference `localfirst-ai-lib/` via a path alias (see `localflow-app/vite.config.ts` for an example).
+> **Development (monorepo):** `localflow-app` references this package via `file:../localflow-core` and a Vite alias pointing directly to the TypeScript source — no pre-built `dist/` is required during development.
 
 ### 2. Set up the proxy
 
@@ -109,7 +107,7 @@ For development you can self-host it locally; for production use the hosted inst
 ### 3. Authenticate with the proxy
 
 ```typescript
-import { ProxyClient } from 'localfirst-ai'
+import { ProxyClient } from 'localflow-core'
 
 const proxy = new ProxyClient('https://backoffice.daquota.io/v1')
 
@@ -122,7 +120,7 @@ await proxy.connect('public', {})
 ### 4. Instantiate and configure
 
 ```typescript
-import { LocalAssistant, type ApiPreference, type LLMConfig } from 'localfirst-ai'
+import { LocalAssistant, type ApiPreference, type LLMConfig } from 'localflow-core'
 
 // Restore previously persisted preferences from storage
 let savedPrefs: ApiPreference[] = []
@@ -230,12 +228,8 @@ await assistant.setApiUserKey('my-api', plainApiKey)
 This lets the assistant inject a relevant past analysis as a system-prompt example before calling the LLM, improving output quality.
 
 ```typescript
-// These helpers live in the demonstrator app (localflow-app/src/lib/)
-import { findBestMatch } from '@/lib/semanticSearch'
-import { catalogLoad } from '@/lib/analysisCatalog'
-
 assistant.setAnalysisMatchHook(async (query, ctx) => {
-  const analyses = catalogLoad()        // or your own catalog store
+  const analyses = catalogLoad()        // your catalog store
   return findBestMatch(query, analyses, ctx.activeColumns)
 })
 ```
@@ -245,7 +239,7 @@ assistant.setAnalysisMatchHook(async (query, ctx) => {
 ## `ProxyClient` API reference
 
 ```typescript
-import { ProxyClient } from 'localfirst-ai'
+import { ProxyClient } from 'localflow-core'
 
 const proxy = new ProxyClient(baseUrl, token?)
 ```
@@ -533,130 +527,35 @@ assistant.off('message', myListener)
 
 ---
 
-## Running the demonstrator app
-
-### Prerequisites
-
-- Node.js 22+
-- A running [LocalFlow proxy](https://github.com/localflow-fr) instance  
-  (or use the hosted one at `https://backoffice.daquota.io/v1`)
-
-### Environment
-
-Create `localflow-app/.env.local` (git-ignored):
+## Building
 
 ```bash
-VITE_PROXY_URL=https://backoffice.daquota.io/v1
-```
-
-### Development
-
-```bash
-nvm use 22
+cd localflow-core
 npm install
-npm run dev
+npm run build   # tsc → dist/
+npm run dev     # tsc --watch (development)
 ```
 
-Opens at `http://localhost:5173`.
+The standalone `tsc` build produces `dist/` with `.js` and `.d.ts` files and is needed when publishing the library to npm. During development inside the monorepo, `localflow-app` uses a Vite alias pointing to the TypeScript source directly — no pre-build required.
 
-### Production build
-
-```bash
-nvm use 22
-npm install
-npm run build   # output in dist/
-```
-
-> **Note:** The build includes a ~22 MB `.wasm` file from `@huggingface/transformers` (used for semantic catalog matching). It is fetched from the HuggingFace CDN at runtime and cached by the browser after the first visit.
-
-### Deploying
-
-The app is a static SPA — deploy the `dist/` folder to any static host.
-
-**SCP example (current production setup):**
-
-```bash
-nvm use 22
-npm install
-npm run build
-scp -P 52345 -r localflow-app/dist/* jsweet@public.jsweet.org:/var/www/DLITE_DATA/__apps/localflow
-```
-
-**Sub-path deployment** — if the app is not served at the domain root, set the base path before building:
-
-```typescript
-// vite.config.ts
-export default defineConfig({
-  base: '/localflow/',   // must match the server path
-  ...
-})
-```
-
-The current production instance is served at `https://apps.daquota.io/localflow/`.
-
----
-
-## Project structure
-
-This is an **npm workspaces monorepo** with two packages.
+## Package structure
 
 ```
-localflow/                    ← git root / workspace root
-├── package.json              # workspace: ["localfirst-ai-lib", "localflow-app"]
-├── README.md
-│
-├── localfirst-ai-lib/        # ── reusable library (publishable as npm package)
-│   ├── package.json          # name: "localfirst-ai"
-│   ├── tsconfig.json         # emits dist/ with .js + .d.ts
-│   └── src/
-│       ├── index.ts          # public exports
-│       ├── LocalAssistant.ts # the core class
-│       └── types.ts          # all public TypeScript interfaces
-│
-└── localflow-app/            # ── demonstrator React application
-    ├── package.json          # depends on "localfirst-ai": "*" (workspace)
-    ├── vite.config.ts        # Vite alias: 'localfirst-ai' → lib TS source (no pre-build needed)
-    ├── index.html
-    └── src/
-        ├── App.tsx           # root: auth, tab management, orchestration
-        ├── components/
-        │   ├── AiAssistant.tsx     # conversation UI (React wrapper around LocalAssistant)
-        │   ├── AnalysisPanel.tsx   # iframe result panel (with sandbox ShieldCheck indicator)
-        │   ├── AnalysisCatalog.tsx # saved analyses sidebar (with sandbox ShieldCheck indicator)
-        │   ├── ConfigPanel.tsx     # settings drawer
-        │   ├── CrmPicker.tsx       # CRM data loader (Odoo / Salesforce)
-        │   ├── DataFlowStatus.tsx  # data flow status chip + session history popover
-        │   ├── DataTable.tsx       # tabular data viewer
-        │   ├── DepsDialog.tsx      # analysis dependency inspector
-        │   └── LoginScreen.tsx     # auth screen with configurable proxy URL
-        ├── i18n/
-        │   ├── en.json       # English strings
-        │   └── fr.json       # French strings
-        ├── hooks/
-        │   └── useFileLoader.ts    # CSV / Excel / PDF drag-and-drop
-        └── lib/
-            ├── analysisCatalog.ts  # localStorage-backed analysis catalog
-            ├── pdfExtractor.ts     # fallback local PDF extractor (PDF.js, unused when proxy available)
-            ├── semanticSearch.ts   # HuggingFace Transformers.js embedding search
-            ├── storage.ts          # proxyClient singleton + DEFAULT_PROXY_URL
-            └── utils.ts
+localflow-core/
+├── package.json          # name: "localflow-core"
+├── tsconfig.json         # emits dist/ with .js + .d.ts
+└── src/
+    ├── index.ts          # public exports
+    ├── LocalAssistant.ts # the core class
+    ├── ProxyClient.ts    # proxy client
+    └── types.ts          # all public TypeScript interfaces
 ```
-
-### Dev workflow
-
-```bash
-npm install          # installs both workspaces + creates the localfirst-ai symlink
-npm run dev          # starts the Vite dev server for localflow-app
-npm run build        # builds localfirst-ai-lib (tsc → dist/) then localflow-app (Vite)
-```
-
-The Vite alias `'localfirst-ai' → '../localfirst-ai-lib/src/index.ts'` means the dev server uses the library TypeScript source directly — no pre-build of the library is required during development. The standalone `tsc` build in `localfirst-ai-lib/` is only needed when publishing the library to npm.
 
 ---
 
 ## Roadmap highlights
 
-- [ ] Publish `localfirst-ai-lib/` to npm as `localfirst-ai`
+- [ ] Publish to npm as `localflow-core`
 - [ ] Pluggable LLM backends (OpenAI, Anthropic, Mistral, Ollama)
 - [ ] Interactive formula results (action buttons returned by formulas)
 - [ ] Async / streaming formula execution
@@ -664,50 +563,132 @@ The Vite alias `'localfirst-ai' → '../localfirst-ai-lib/src/index.ts'` means t
 ### Recently shipped
 
 - [x] **PDF document support** — PDFs as first-class datasets; text extracted via the proxy, full document text injected into LLM context
-- [x] **Data flow awareness** — `data:local` / `data:proxy` / `data:llm` events; animated status chip in the header; session history popover; sandbox safety indicator on all Run buttons
-- [x] **Configurable proxy URL** — login screen lets users point to their own proxy instance; URL persisted in localStorage
+- [x] **Data flow awareness** — `data:local` / `data:proxy` / `data:llm` events; animated status chip in the header; session history popover; sandbox safety indicator
+- [x] **Configurable proxy URL** — proxy URL configurable at runtime; persisted in localStorage
 - [x] **CRM connectors** — Odoo and Salesforce authentication and data loading via `ProxyClient`
-
----
-
-## Contributing
-
-Pull requests welcome. Please open an issue first for significant changes.
-
-```bash
-git clone https://github.com/localflow-fr/localflow
-cd localflow
-nvm use 22
-npm install
-npm run dev
-```
-
-Code style: TypeScript strict, no `any`, Tailwind for styles, no unnecessary comments.
 
 ---
 
 ## License
 
 ```
-MIT License
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
 
-Copyright (c) 2026 LocalFlow
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+   1. Definitions.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship made available under
+      the License, as indicated by a copyright notice that is included in
+      or attached to the work.
+
+      "Derivative Works" shall mean any work that is based on the Work,
+      for which the editorial revisions, annotations, elaborations, or other
+      modifications represent, as a whole, an original work of authorship.
+
+      "Contribution" shall mean any work of authorship submitted to the
+      Licensor for inclusion in the Work.
+
+      "Contributor" shall mean Licensor and any Legal Entity on behalf of
+      whom a Contribution has been received by the Licensor and included
+      within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      patent license to make, use, sell, offer for sale, import, and
+      otherwise transfer the Work.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or Derivative Works
+          a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work; and
+
+      (d) If the Work includes a "NOTICE" text file, You must include a
+          readable copy of the attribution notices contained within such
+          NOTICE file.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution submitted for inclusion in the Work shall be under
+      the terms and conditions of this License.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or agreed
+      to in writing, Licensor provides the Work on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any conditions of TITLE,
+      NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR
+      PURPOSE. You are solely responsible for determining the
+      appropriateness of using or reproducing the Work.
+
+   8. Limitation of Liability. In no event and under no legal theory
+      shall any Contributor be liable to You for damages, including any
+      direct, indirect, special, incidental, or exemplary damages of
+      any character arising as a result of this License or out of the use
+      or inability to use the Work.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work, You may offer acceptance of warranty, liability, or other
+      obligations consistent with this License. However, in accepting such
+      obligations, You may act only on Your own behalf and on Your sole
+      responsibility, not on behalf of any other Contributor.
+
+   END OF TERMS AND CONDITIONS
+
+   Copyright (c) 2026 LocalFlow (localflow.fr)
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
 ```
