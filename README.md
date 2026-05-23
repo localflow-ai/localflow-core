@@ -114,13 +114,17 @@ npm install localflow-core
 
 ### 2. Set up the proxy
 
-The assistant requires a [LocalFlow proxy](https://github.com/localflow-fr) instance.  
-The proxy handles:
-- LLM API key encryption and forwarding
-- Whitelisting of external APIs callable from analysis formulas
-- Session-based authentication
+The assistant requires a [LocalFlow proxy](https://github.com/localflow-ai/localflow-proxy) instance. The proxy is the mandatory network gateway for the local-first AI sandbox — all outbound calls from formula execution pass through it. It handles:
 
-For development you can self-host it locally; for production use the hosted instance at `https://backoffice.daquota.io/v1` (requires an account).
+- **Security and session management** — authenticates users against your business systems (CRM, ERP, or guest sessions), manages session tokens, and encrypts API keys so secrets are never exposed to the browser
+- **API governance** — defines which external APIs formulas may call; supports BYOK, per-source throttling, URL whitelisting, and OAuth 2.0 token exchange
+- **Server-side edge services** — PDF text extraction, OCR, and other tasks better suited to a server than a browser
+- **LLM bridge** — decrypts the user's API key at request time and forwards generation requests to the LLM
+- **Data flow monitoring** — tracks and audits what data enters and leaves the sandbox
+
+**Quick testing:** a hosted instance is available at `https://backoffice.daquota.io/v1` — no account needed. You can start with a guest (public) session, or authenticate against your own CRM if you want to test with real data. That said, you probably don't want to point your production CRM at an instance you don't control; use a sandbox or test environment instead.
+
+**Self-hosting:** for production use, run your own instance — see the [localflow-proxy](https://github.com/localflow-ai/localflow-proxy) repository for setup instructions.
 
 ### 3. Authenticate with the proxy
 
