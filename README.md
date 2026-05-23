@@ -18,13 +18,6 @@ In practice, however, this approach faces significant limitations:
 
 This relaxation is principled: the sensitive asset is your data, not the model. As long as raw data never reaches the LLM, the privacy guarantee holds — regardless of whether inference runs in the cloud, on your own server, or in the browser. A self-hosted LLM achieves the same guarantees as the strict approach while remaining free to use the strongest model available. The two visions are fully compatible and can be combined.
 
-### The LLM as a one-time code generator
-
-With LocalFlow's local-first AI, the LLM acts as a **code generator**, not a data processor. As little as possible is sent to make that generation work:
-
-- **Structured data** (CSV, Excel, CRM): column headers and statistical samples are enough for the LLM to write correct analysis code. Raw rows are never sent.
-- **Documents** (PDF): the extracted text is needed so the LLM understands the document's structure and can write a reliable parser. Users can work with obfuscated or template documents to generate formulas, then run them locally on real documents — the LLM only needs the structure, not the actual values.
-
 | | Strict local-first AI | LocalFlow local-first AI |
 |---|---|---|
 | Raw data stays local | ✅ | ✅ |
@@ -34,6 +27,13 @@ With LocalFlow's local-first AI, the LLM acts as a **code generator**, not a dat
 | Results are deterministic | ❌ | ✅ |
 | Re-runs without extra AI tokens | ❌ | ✅ |
 | Works on large datasets | Limited | ✅ |
+
+### The LLM as a one-time code generator
+
+With LocalFlow's local-first AI, the LLM acts as a **code generator**, not a data processor. As little as possible is sent to make that generation work:
+
+- **Structured data** (CSV, Excel, CRM): column headers and statistical samples are enough for the LLM to write correct analysis code. Raw rows are never sent.
+- **Documents** (PDF): the extracted text is needed so the LLM understands the document's structure and can write a reliable parser. Users can work with obfuscated or template documents to generate formulas, then run them locally on real documents — the LLM only needs the structure, not the actual values.
 
 ### Transparent two-step process
 
