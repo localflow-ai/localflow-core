@@ -6,11 +6,32 @@
 
 ## What is Local-first AI?
 
-Most "AI on your data" products work by sending your data to a cloud service. LocalFlow takes the opposite approach: **all data stays in the browser**. The AI generates JavaScript analysis code, and that code executes locally in a sandbox — your raw data never reaches the LLM.
+In its strict definition, local-first AI means running the AI model itself in the browser, making inference local so that your data never leaves your device. The appeal is real: no cloud dependency, no data sent to a third party, full privacy by default.
+
+In practice, however, this approach faces significant limitations:
+
+- **Model quality** — browser-based models are considerably weaker than cloud models, especially for complex tasks like code generation or structured reasoning. A hallucination in a code generator produces a formula that silently computes the wrong result.
+- **Resource constraints** — local model runtimes require multi-gigabyte downloads, consume substantial memory and CPU, and degrade on low-end devices.
+- **Hardware requirements and environmental impact** — running a capable LLM locally demands a powerful device (typically GPU-equipped), raising the barrier for end users. And while there is no per-query financial cost, there is an energy one: every query runs a full model pass on the user's device, which is rarely as energy-efficient as an optimised data centre. This has a direct green IT impact that is easy to overlook.
+- **Maturity** — local model quality is improving fast, but the gap with cloud models for code generation remains wide enough to matter for production use.
+
+**LocalFlow proposes a slightly "relaxed" vision of local-first AI to overcome these issues.** Rather than constraining *where inference happens*, it constrains *what data inference ever sees*. The LLM acts as a one-time, data-blind code generator — only structural metadata (column names, statistical samples, document layout) is sent to the model. The generated code then executes locally in a sandboxed environment, on your actual data, producing deterministic results.
+
+This relaxation is principled: the sensitive asset is your data, not the model. As long as raw data never reaches the LLM, the privacy guarantee holds — regardless of whether inference runs in the cloud, on your own server, or in the browser. A self-hosted LLM achieves the same guarantees as the strict approach while remaining free to use the strongest model available. The two visions are fully compatible and can be combined.
+
+| | Strict local-first AI | LocalFlow local-first AI |
+|---|---|---|
+| Raw data stays local | ✅ | ✅ |
+| Computation executes locally | ✅ | ✅ |
+| Uses best available models | ❌ | ✅ |
+| Compatible with self-hosted LLMs | ✅ | ✅ |
+| Results are deterministic | ❌ | ✅ |
+| Re-runs without extra AI tokens | ❌ | ✅ |
+| Works on large datasets | Limited | ✅ |
 
 ### The LLM as a one-time code generator
 
-With Local-First AI, the LLM acts as a **code generator**, not a data processor. LocalFlow sends as little as possible to make that generation work:
+With LocalFlow's local-first AI, the LLM acts as a **code generator**, not a data processor. As little as possible is sent to make that generation work:
 
 - **Structured data** (CSV, Excel, CRM): column headers and statistical samples are enough for the LLM to write correct analysis code. Raw rows are never sent.
 - **Documents** (PDF): the extracted text is needed so the LLM understands the document's structure and can write a reliable parser. Users can work with obfuscated or template documents to generate formulas, then run them locally on real documents — the LLM only needs the structure, not the actual values.
@@ -23,14 +44,14 @@ Code generation (step 1) and local execution (step 2) are invisible to the user 
 
 ### Key properties
 
-1. **Full AI power** — use LLM prompting and inference to analyse complex, heterogeneous data
+1. **Full AI power** — use the best available LLM to analyse complex, heterogeneous data
 2. **Data safety** — sensitive data stays local even when using a cloud LLM; a self-hosted LLM removes the last network hop entirely
-3. **No hallucinated results** — the human-in-the-loop process means outputs are computed from real data by deterministic code, not inferred by the model
+3. **No hallucinated results** — outputs are computed from real data by deterministic code, not inferred by the model
 4. **Scalable** — once generated, run the same analysis on large datasets as many times as needed, consuming no additional AI tokens
 5. **Explainable** — the generated code is fully inspectable; any AI can explain why a formula works or debug why it fails
-6. **Green and sustainable** — by using AI only in the code-generation phase, Local-First AI reduces dependence on heavy inference infrastructure
+6. **Green and sustainable** — AI is used only for code generation, a one-time cost per analysis. Subsequent runs consume no AI inference at all, reducing dependence on energy-intensive infrastructure
 
-> 📄 For a deeper dive into the Local-First AI concepts, read the [LocalFlow white paper](https://localflow.fr/LocalFlow%20-%20white%20paper%20-%20en.pdf).
+> 📄 For a deeper dive into these concepts, read the [LocalFlow white paper](https://localflow.fr/LocalFlow%20-%20white%20paper%20-%20en.pdf).
 
 ---
 
