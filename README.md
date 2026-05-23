@@ -93,14 +93,9 @@ Code generation (step 1) and local execution (step 2) are invisible to the user 
 
 > 🟢 **Browser** — stays in your browser &nbsp;·&nbsp; 🔵 **Proxy** — goes to your server only and proxied APIs &nbsp;·&nbsp; 🟠 **LLM** — forwarded to the AI model via your proxy
 
-### Packages
-
-| Path | Role |
-|------|------|
-| `localflow-core/` | **`LocalAssistant` class** — this reusable library. Framework-agnostic, no UI dependencies. Published as `localflow-core`. |
-| `localflow-app/` | **Demonstrator app** — a React + Vite application. See [localflow-app README](../localflow-app/README.md). |
-
 ---
+
+> **Want to see it in action?** Try the [LocalFlow online assistant](https://apps.daquota.io/localflow/) — no installation needed. Source: [localflow-app](https://github.com/localflow-ai/localflow-app).
 
 ## Quick start — embedding `LocalAssistant` in your app
 
