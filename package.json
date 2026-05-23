@@ -1,5 +1,5 @@
 {
-  "name": "localfirst-ai",
+  "name": "localflow-core",
   "version": "0.1.0",
   "description": "Local-first AI assistant — run LLM-generated analysis formulas in a sandboxed iframe, with datasets and proxied API access",
   "license": "MIT",
