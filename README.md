@@ -93,6 +93,14 @@ Code generation (step 1) and local execution (step 2) are invisible to the user 
 
 > 🟢 **Browser** — stays in your browser &nbsp;·&nbsp; 🔵 **Proxy** — goes to your server only and proxied APIs &nbsp;·&nbsp; 🟠 **LLM** — forwarded to the AI model via your proxy
 
+### Limitations
+
+Because the LLM only ever sees structural metadata — never the actual rows — there are tasks that LocalFlow's local-first approach cannot perform on its own. Inference excels at understanding natural language, translating free-form content, summarising documents, or spotting patterns across raw text. When those capabilities need to operate on the full dataset, a classical AI pipeline (one that sends the data to the model) remains the right tool.
+
+LocalFlow is therefore a **complement to classical AI, not a replacement**. It opens up use cases that are out of reach for classical AI — large-scale data analysis without privacy exposure, deterministic and repeatable results, scalable execution at zero marginal AI cost — while leaving room for classical approaches where they are genuinely needed.
+
+That boundary is not fixed. The proxy can expose tools — including LLM-powered ones — that operate on a carefully scoped subset of data, defined and controlled by the administrator or the user. A formula could, for example, call a proxy-hosted service that summarises a specific field or translates a column, without the LLM ever seeing the full dataset. This kind of extension requires intentional configuration of your proxy environment and its available tools, tailoring the setup to your specific use cases and acceptable data-sharing boundaries.
+
 ---
 
 > **Want to see it in action?** Try the [LocalFlow online assistant](https://apps.daquota.io/localflow/) — no installation needed. Source: [localflow-app](https://github.com/localflow-ai/localflow-app).
