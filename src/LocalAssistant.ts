@@ -5,6 +5,7 @@ import type {
   AnalysisMatchHook, AnalysisMatchContext, AnalysisMatchResult,
 } from './types'
 import type { ProxyClient } from './ProxyClient'
+import { darkGray, darkVars } from './theme'
 
 const DEFAULT_SANDBOX_PERMISSIONS = [
   'allow-scripts',
@@ -465,7 +466,7 @@ function tryParseJson(raw: string): Record<string, unknown> | null {
 function esc(s: string): string { return s.replace(/<\//g, '<\\/') }
 
 const DARK_CSS = `
-html.dark body { background-color: oklch(0.145 0.018 175); color: oklch(0.965 0.006 175); }
+html.dark body { background-color: ${darkVars['--background']}; color: ${darkVars['--foreground']}; }
 `
 
 const TAILWIND_CONFIG = `
@@ -475,17 +476,17 @@ tailwind.config = {
     extend: {
       colors: {
         gray: {
-          950: 'oklch(0.115 0.018 175)',
-          900: 'oklch(0.145 0.018 175)',
-          800: 'oklch(0.205 0.018 175)',
-          700: 'oklch(0.27  0.018 175)',
-          600: 'oklch(0.38  0.02  175)',
-          500: 'oklch(0.50  0.02  175)',
-          400: 'oklch(0.62  0.02  175)',
-          300: 'oklch(0.72  0.015 175)',
-          200: 'oklch(0.82  0.010 175)',
-          100: 'oklch(0.91  0.006 175)',
-          50:  'oklch(0.96  0.004 175)',
+          950: '${darkGray[950]}',
+          900: '${darkGray[900]}',
+          800: '${darkGray[800]}',
+          700: '${darkGray[700]}',
+          600: '${darkGray[600]}',
+          500: '${darkGray[500]}',
+          400: '${darkGray[400]}',
+          300: '${darkGray[300]}',
+          200: '${darkGray[200]}',
+          100: '${darkGray[100]}',
+          50:  '${darkGray[50]}',
         }
       }
     }

@@ -1,6 +1,7 @@
 export { LocalAssistant } from './LocalAssistant'
 export { ProxyClient } from './ProxyClient'
 export { hasApiKey } from './types'
+export { darkVars } from './theme'
 export type {
   LocalAssistantConfig,
   ResultContainer,
