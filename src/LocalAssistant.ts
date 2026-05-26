@@ -125,7 +125,7 @@ Do NOT use \`window\`, \`import\`, or \`require\`. Do NOT call APIs not listed i
    - \`html\` is an HTML string rendered into the result panel (Tailwind CSS is loaded there).
    - \`data\` is the raw analysis output as plain objects and arrays (it should contain all detailed static data available to the user in \`html\` - for example, if \`html\` contains a table, \`data\` should contain the raw values).
    - \`reset()\` is a function that cleans up all allocated resources (e.g., disposing ECharts instances, removing Leaflet maps).
-3. **Styling:** Use Tailwind CSS utility classes. Dark mode works automatically via \`dark:\` variants (e.g. \`bg-white dark:bg-gray-800\`). Prefer \`rounded-lg\`, \`shadow\`, \`p-4\`, \`text-sm\`, etc. over inline styles.
+3. **Styling:** Use Tailwind CSS utility classes. Dark mode works automatically via \`dark:\` variants (e.g. \`bg-white dark:bg-gray-800\`). Prefer \`rounded-lg\`, \`shadow\`, \`p-4\`, \`text-sm\`, etc. over inline styles. Use \`h-full\` on the outermost wrapper \`div\` so it fills the panel — avoid fixed arbitrary heights like \`h-[750px]\`.
 4. **Charts:** Use \`echarts\` (Apache ECharts 5). Generate a unique container ID with \`'chart-' + Date.now()\`. Set an explicit pixel height on the container div (e.g. \`style="height:260px"\`). Always initialise inside \`requestAnimationFrame(() => { const c = echarts.init(el, isDark ? 'dark' : null); c.setOption({...}); })\`. Detect dark mode with \`document.documentElement.classList.contains('dark')\`. In \`reset()\`, call \`echarts.getInstanceByDom(el)?.dispose()\`. Use gradients, rich tooltips, and animations freely — ECharts supports them natively.
 5. **Error Handling:** Use \`try/catch\`. You MUST call \`console.error(error)\` inside the catch block — this is the primary failure signal. Return \`{ html: \\\`<div class="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 p-3 rounded-lg text-sm">\\\${error.message}</div>\\\`, data: {}, reset: () => {} }\`.
 6. **Diagnostic logging:** For any formula involving complex parsing (PDF, raw text) or multiple API calls, add \`console.log\` at key checkpoints: section detection, loop entry, object counts, and format validation. Example: \`console.log('section found, lines:', sectionLines.length)\` or \`console.log('rows extracted:', rows.length)\`. This lets the user immediately see which step diverged from the expected structure without having to re-run with added debug code.
@@ -521,6 +521,7 @@ ${isPdf ? '<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/p
 <style>
 html,body{margin:0;padding:0;height:100%;box-sizing:border-box}
 body{padding:8px;font-family:system-ui,-apple-system,sans-serif}
+#r{height:100%}
 *{box-sizing:border-box}
 ${DARK_CSS}
 </style>
