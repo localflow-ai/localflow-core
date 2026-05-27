@@ -5,7 +5,16 @@ import type {
   AnalysisMatchHook, AnalysisMatchContext, AnalysisMatchResult,
 } from './types'
 import type { ProxyClient } from './ProxyClient'
-import { darkGray, darkVars } from './theme'
+// Gray scale used only inside the analysis sandbox (Tailwind config injection).
+// Not exported — these neutrals match the default dark palette; apps can override
+// the body background/foreground via LocalAssistantConfig.sandboxDarkVars or let
+// the assistant read them automatically from the host DOM.
+const _sandboxGray = {
+  950: 'oklch(0.12 0 0)', 900: 'oklch(0.20 0 0)', 800: 'oklch(0.28 0 0)',
+  700: 'oklch(0.35 0 0)', 600: 'oklch(0.42 0 0)', 500: 'oklch(0.52 0 0)',
+  400: 'oklch(0.63 0 0)', 300: 'oklch(0.73 0 0)', 200: 'oklch(0.83 0 0)',
+  100: 'oklch(0.91 0 0)', 50:  'oklch(0.96 0 0)',
+} as const
 
 const DEFAULT_SANDBOX_PERMISSIONS = [
   'allow-scripts',
@@ -465,9 +474,11 @@ function tryParseJson(raw: string): Record<string, unknown> | null {
 
 function esc(s: string): string { return s.replace(/<\//g, '<\\/') }
 
-const DARK_CSS = `
-html.dark body { background-color: ${darkVars['--background']}; color: ${darkVars['--foreground']}; }
-`
+function buildSandboxDarkCss(vars?: Record<string, string>): string {
+  const bg  = vars?.['--background'] ?? 'oklch(0.17 0 0)'
+  const fg  = vars?.['--foreground'] ?? 'oklch(0.96 0 0)'
+  return `html.dark body { background-color: ${bg}; color: ${fg}; }`
+}
 
 const TAILWIND_CONFIG = `
 tailwind.config = {
@@ -476,17 +487,17 @@ tailwind.config = {
     extend: {
       colors: {
         gray: {
-          950: '${darkGray[950]}',
-          900: '${darkGray[900]}',
-          800: '${darkGray[800]}',
-          700: '${darkGray[700]}',
-          600: '${darkGray[600]}',
-          500: '${darkGray[500]}',
-          400: '${darkGray[400]}',
-          300: '${darkGray[300]}',
-          200: '${darkGray[200]}',
-          100: '${darkGray[100]}',
-          50:  '${darkGray[50]}',
+          950: '${_sandboxGray[950]}',
+          900: '${_sandboxGray[900]}',
+          800: '${_sandboxGray[800]}',
+          700: '${_sandboxGray[700]}',
+          600: '${_sandboxGray[600]}',
+          500: '${_sandboxGray[500]}',
+          400: '${_sandboxGray[400]}',
+          300: '${_sandboxGray[300]}',
+          200: '${_sandboxGray[200]}',
+          100: '${_sandboxGray[100]}',
+          50:  '${_sandboxGray[50]}',
         }
       }
     }
@@ -500,6 +511,7 @@ function buildSandboxDocumentFn(
   darkMode: boolean,
   isPdf = false,
   pdfText = '',
+  sandboxDarkVars?: Record<string, string>,
 ): string {
   const dataJson     = esc(JSON.stringify(rows))
   const datasetsJson = esc(JSON.stringify(datasets))
@@ -524,7 +536,7 @@ html,body{margin:0;padding:0;height:100%;box-sizing:border-box}
 body{padding:8px;font-family:system-ui,-apple-system,sans-serif}
 #r{height:100%}
 *{box-sizing:border-box}
-${DARK_CSS}
+${buildSandboxDarkCss(sandboxDarkVars)}
 </style>
 </head>
 <body>
@@ -1075,6 +1087,14 @@ export class LocalAssistant {
   /** Builds the full srcdoc HTML for the analysis iframe. */
   buildSandboxDocument(formula: string): string {
     const active = this.getActiveDataset()
+    // Use explicit config first; fall back to reading the host document's CSS vars.
+    let sandboxDarkVars = this._config.sandboxDarkVars
+    if (!sandboxDarkVars && typeof document !== 'undefined') {
+      const s = getComputedStyle(document.documentElement)
+      const bg = s.getPropertyValue('--background').trim()
+      const fg = s.getPropertyValue('--foreground').trim()
+      if (bg) sandboxDarkVars = { '--background': bg, '--foreground': fg }
+    }
     return buildSandboxDocumentFn(
       active?.rows ?? [],
       this.getDatasets(),
@@ -1082,6 +1102,7 @@ export class LocalAssistant {
       this.darkMode,
       active?.type === 'pdf',
       this.getActivePdfExtractedText(),
+      sandboxDarkVars,
     )
   }
 

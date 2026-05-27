@@ -45,6 +45,12 @@ export interface LocalAssistantConfig {
    * Override only if your use case requires additional capabilities.
    */
   sandboxPermissions?: string[]
+  /**
+   * CSS custom properties applied to the analysis sandbox iframe when dark mode is active.
+   * Pass your app's dark-mode variable map so the sandbox palette matches your UI.
+   * At minimum, '--background' and '--foreground' are used for the sandbox body.
+   */
+  sandboxDarkVars?: Record<string, string>
 }
 
 // ---------------------------------------------------------------------------
