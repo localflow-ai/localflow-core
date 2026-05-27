@@ -22,4 +22,5 @@ export type {
   AnalysisMatchHook,
   MessageListener,
   LlmDataPayload,
+  ApiProxyPayload,
 } from './types'

@@ -1116,15 +1116,19 @@ export class LocalAssistant {
       this._emit('api:blocked', { url, hostname, apiConfig })
     }
 
+    const method = opts.method || 'GET'
+    const apiConfig = matched?.config ?? null
+
     let res: Response
     try {
       res = await fetch(proxyUrl.toString(), {
-        method: opts.method || 'GET',
+        method,
         headers: { ...headers, 'X-Proxy-Token': `Bearer ${this._config.proxy.token ?? ''}` },
         body: opts.body || undefined,
       })
     } catch (err) {
       emitIfUnmatched()
+      this._emit('data:api-proxy', { url, method, body: opts.body ?? null, apiConfig })
       throw err
     }
 
@@ -1143,6 +1147,7 @@ export class LocalAssistant {
       }
     }
 
+    this._emit('data:api-proxy', { url, method, body: opts.body ?? null, apiConfig, status: res.status })
     return res
   }
 

@@ -180,6 +180,17 @@ export type AnalysisMatchHook = (
 /** Listener for LLM message responses emitted by LocalAssistant. */
 export type MessageListener = (response: AssistantResponse) => void
 
+/** Structured payload emitted by LocalAssistant on 'data:api-proxy' events.
+ *  Fired for every formula fetch routed through the proxy — success and failure.
+ *  Contains categorical data only — no human-readable text or i18n strings. */
+export interface ApiProxyPayload {
+  url: string             // full URL called (including query params)
+  method: string          // HTTP method
+  body: string | null     // raw request body sent (what left the browser)
+  apiConfig: ApiConfig | null  // matched API definition; null if URL was unrecognised
+  status?: number         // HTTP response status; undefined on network error
+}
+
 /** Structured payload emitted by LocalAssistant on 'data:llm' events.
  *  Contains categorical data only — no human-readable text or i18n strings. */
 export type LlmDataPayload =

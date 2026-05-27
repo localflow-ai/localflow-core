@@ -551,6 +551,7 @@ assistant.off('message', myListener)
 | `data:local` | `{ data: string, action: string }` | An action completed entirely in the browser. E.g. file loaded from disk, formula executed in sandbox. Emitted by the app layer. |
 | `data:proxy` | `{ data: string, action: string }` | Data was sent to the proxy server but not to the LLM. E.g. PDF extraction. Emitted by the app layer. |
 | `data:llm` | `LlmDataPayload` | Data was forwarded to the LLM. Categorical payload — no display strings. `kind` is `'table'`, `'pdf'`, or `'text'`; always includes `query` (raw user message) and `dataset` (file/dataset name). Table events include `columns: number`; PDF events include `pages: number`. Import the type: `import type { LlmDataPayload } from 'localflow-core'`. |
+| `data:api-proxy` | `ApiProxyPayload` | A formula fetch was routed through the api-proxy — fired on every call (success and failure). Includes `url`, `method`, `body` (raw request body — what left the browser), `apiConfig` (matched API definition or `null` if unrecognised), and `status` (HTTP response status; `undefined` on network error). Import the type: `import type { ApiProxyPayload } from 'localflow-core'`. |
 
 ---
 
