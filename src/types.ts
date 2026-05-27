@@ -179,3 +179,10 @@ export type AnalysisMatchHook = (
 
 /** Listener for LLM message responses emitted by LocalAssistant. */
 export type MessageListener = (response: AssistantResponse) => void
+
+/** Structured payload emitted by LocalAssistant on 'data:llm' events.
+ *  Contains categorical data only — no human-readable text or i18n strings. */
+export type LlmDataPayload =
+  | { kind: 'table'; query: string; dataset: string; columns: number }
+  | { kind: 'pdf';   query: string; dataset: string; pages: number   }
+  | { kind: 'text';  query: string; dataset: string                  }

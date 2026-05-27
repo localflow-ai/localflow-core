@@ -963,20 +963,14 @@ export class LocalAssistant {
 
     // Notify before the network call so the UI can update immediately
     {
-      const name = this._activeDatasetName ?? ''
-      let data: string
-      let action: string
+      const dataset = this._activeDatasetName ?? ''
       if (active?.type === 'pdf') {
-        data   = name ? `"${name}" (${this.getActivePdfPageCount()} pages)` : 'Document'
-        action = 'Full document text sent to AI model via proxy'
+        this._emit('data:llm', { kind: 'pdf',   query: userMessage, dataset, pages:   this.getActivePdfPageCount() })
       } else if (active && active.columns.length > 0) {
-        data   = name ? `"${name}" (${active.columns.length} columns — headers + sample rows only)` : 'Dataset statistics'
-        action = 'Column statistics sent to AI model via proxy — raw data stayed local'
+        this._emit('data:llm', { kind: 'table', query: userMessage, dataset, columns: active.columns.length })
       } else {
-        data   = 'Text query'
-        action = 'Sent to AI model via proxy'
+        this._emit('data:llm', { kind: 'text',  query: userMessage, dataset: '' })
       }
-      this._emit('data:llm', { data, action })
     }
 
     const res = await fetch(`${this._config.proxy.baseUrl}/common/genai`, {

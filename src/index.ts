@@ -21,4 +21,5 @@ export type {
   AnalysisMatchResult,
   AnalysisMatchHook,
   MessageListener,
+  LlmDataPayload,
 } from './types'

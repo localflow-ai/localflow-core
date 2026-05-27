@@ -214,8 +214,10 @@ assistant.on('formula:done', ({ data }) => {
 })
 
 // Track what leaves the browser — see the Events reference for data:local/proxy/llm
-assistant.on('data:llm', ({ data, action }) => {
-  console.log(`Sent to AI: ${data} — ${action}`)
+assistant.on('data:llm', (payload) => {
+  // payload is LlmDataPayload — categorical data, no display strings
+  // { kind: 'table'|'pdf'|'text', query, dataset, columns?, pages? }
+  console.log('LLM event:', payload.kind, payload.dataset)
 })
 
 // Send a message — the LLM generates a formula, and the assistant
@@ -546,9 +548,9 @@ assistant.off('message', myListener)
 | `history:reset` | _(none)_ | Conversation history was cleared (e.g. because the active PDF changed). |
 | `api:blocked` | `{ url, hostname, apiConfig \| null }` | Formula called a URL not in the activated API list and the request failed. `apiConfig` is set if the API is known but inactive, `null` if completely unknown. |
 | `api:error` | `{ url, hostname, apiConfig, reason }` | An active API returned a JSON error body (e.g. expired key, quota exceeded). `reason` is extracted from the response. |
-| `data:local` | `{ data: string, action: string }` | An action completed entirely in the browser. E.g. file loaded from disk, formula executed in sandbox. |
-| `data:proxy` | `{ data: string, action: string }` | Data was sent to the proxy server but not to the LLM. E.g. PDF extraction. |
-| `data:llm` | `{ data: string, action: string }` | Data was forwarded to the LLM. E.g. document text or column statistics in a conversation turn. |
+| `data:local` | `{ data: string, action: string }` | An action completed entirely in the browser. E.g. file loaded from disk, formula executed in sandbox. Emitted by the app layer. |
+| `data:proxy` | `{ data: string, action: string }` | Data was sent to the proxy server but not to the LLM. E.g. PDF extraction. Emitted by the app layer. |
+| `data:llm` | `LlmDataPayload` | Data was forwarded to the LLM. Categorical payload — no display strings. `kind` is `'table'`, `'pdf'`, or `'text'`; always includes `query` (raw user message) and `dataset` (file/dataset name). Table events include `columns: number`; PDF events include `pages: number`. Import the type: `import type { LlmDataPayload } from 'localflow-core'`. |
 
 ---
 
