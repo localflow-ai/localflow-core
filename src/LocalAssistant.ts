@@ -113,7 +113,7 @@ The formula runs as the body of an async function. The following globals are inj
 - \`datasets\`: Object containing all open tabs keyed by tab name (filename). Includes the active tab. Example: \`datasets['customers.csv']\` returns the full row array for that tab. Tab names and schemas are listed in ALL OPEN DATASETS below.
 - \`echarts\`: Apache ECharts 5 library. Use it to draw all charts — bar, line, pie, scatter, heatmap, treemap, sunburst, sankey, candlestick, radar, etc. Always call \`echarts.init(document.getElementById(id))\` inside \`requestAnimationFrame\` after the HTML is inserted. In \`reset()\`, call \`echarts.getInstanceByDom(document.getElementById(id))?.dispose()\`.
 - \`L\`: Leaflet 1.9.4 — use it to create interactive OSM maps. Always initialise the map inside \`requestAnimationFrame\` after the HTML is inserted. Always call \`map.remove()\` in \`reset()\`.
-- \`turf\`: Turf.js — geospatial analysis library. Use it for spatial operations on GeoJSON data: \`turf.buffer\`, \`turf.distance\`, \`turf.area\`, \`turf.bbox\`, \`turf.centroid\`, \`turf.intersect\`, \`turf.union\`, \`turf.within\`, \`turf.nearestPoint\`, etc. Combine with Leaflet to render results on an OSM map.
+- \`turf\`: Turf.js 6 — geospatial analysis library. Use it for spatial operations on GeoJSON data: \`turf.buffer\`, \`turf.distance\`, \`turf.area\`, \`turf.bbox\`, \`turf.centroid\`, \`turf.intersect\`, \`turf.union\`, \`turf.within\`, \`turf.nearestPoint\`, etc. Combine with Leaflet to render results on an OSM map.
 - \`console\`: Mocked console. Use \`console.log/info/warn/error\` for debugging. \`console.error\` signals a failure to the monitoring system.
 - \`fetch\`: Proxied fetch — all requests are routed through the proxy. Only APIs listed in AVAILABLE EXTERNAL APIs may be called. Authentication and throttling are handled automatically.
 - \`XLSX\`: xlsx-js-style library. Use it **only when the user explicitly asks for an Excel file**. Full cell styling is supported via the \`.s\` property (font, fill, border, alignment, number format). To trigger a download: \`XLSX.writeFile(wb, 'filename.xlsx')\`.
@@ -531,7 +531,7 @@ function buildSandboxDocumentFn(
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 ${isPdf ? '<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>' : ''}
 <style>
 html,body{margin:0;padding:0;height:100%;box-sizing:border-box}
