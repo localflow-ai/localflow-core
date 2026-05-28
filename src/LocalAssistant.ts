@@ -478,7 +478,11 @@ function esc(s: string): string { return s.replace(/<\//g, '<\\/') }
 function buildSandboxDarkCss(vars?: Record<string, string>): string {
   const bg  = vars?.['--background'] ?? 'oklch(0.17 0 0)'
   const fg  = vars?.['--foreground'] ?? 'oklch(0.96 0 0)'
-  return `html.dark body { background-color: ${bg}; color: ${fg}; }`
+  // Safety net: force common text-bearing elements to inherit the light body color
+  // in dark mode. Specificity (0,1,2) beats plain Tailwind utilities (0,1,0) but
+  // loses to dark: variants (0,2,1), so intentional dark-mode colors still apply.
+  return `html.dark body { background-color: ${bg}; color: ${fg}; }
+html.dark td, html.dark th, html.dark p, html.dark li, html.dark span, html.dark label { color: inherit; }`
 }
 
 const TAILWIND_CONFIG = `
