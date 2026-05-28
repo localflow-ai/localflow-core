@@ -152,7 +152,7 @@ Do NOT use \`window\`, \`import\`, or \`require\`. Do NOT call APIs not listed i
     - In \`requestAnimationFrame\`, initialise: \`const map = L.map(mapId).setView([lat,lng], zoom)\` then add \`L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'© OpenStreetMap contributors'}).addTo(map)\`
     - In \`reset()\`, always call \`map.remove()\`
     - Use \`L.marker([lat,lng]).addTo(map).bindPopup(label)\` for points; \`L.circle\`, \`L.polygon\`, etc. for shapes.
-    - Always validate coordinates: skip rows where lat/lng are missing or non-numeric.`
+    - **CRITICAL — coordinates:** CSV fields are always strings. You MUST call \`parseFloat()\` on every lat/lng value before passing it to Leaflet. Always filter rows first: \`const valid = data.filter(r => { const lat = parseFloat(r[latCol]); const lng = parseFloat(r[lngCol]); return !isNaN(lat) && !isNaN(lng); });\` then use \`parseFloat()\` again when creating markers: \`L.marker([parseFloat(r[latCol]), parseFloat(r[lngCol])])\`. Never pass raw field values directly — even if they look numeric, they are strings and Leaflet will throw \`Invalid LatLng\`.`
 
   const otherDatasets = Object.entries(datasets).filter(([, r]) => r !== rows)
   const datasetsSection = Object.keys(datasets).length > 0
