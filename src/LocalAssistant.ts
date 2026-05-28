@@ -120,6 +120,9 @@ The formula runs as the body of an async function. The following globals are inj
 - \`jsPDF\`: jsPDF 2.x constructor. Use it **only when the user explicitly asks for a PDF file**. Create structured multi-page PDFs with text, shapes, images and tables. Page numbers: iterate pages and call \`doc.text('Page X / Y', x, y)\`. To download: \`doc.save('filename.pdf')\`.
 ${activeDatasetType === 'pdf' ? `- \`pdfData\`: Uint8Array — raw bytes of the active PDF document.
 - \`pdfjsLib\`: PDF.js 3.x — use it to parse the PDF. Worker is disabled for sandbox compatibility (all parsing runs in the main thread).` : ''}
+- \`parseMoney(s)\`: Pre-injected helper. Parses a monetary amount string: strips currency symbols, footnote markers and leading sign (+/-). Returns NaN for non-monetary strings (account numbers with 7+ consecutive digits, codes containing '/', strings with letters). Always use for columns relating to price, amount, debit, credit, balance, total, or value.
+- \`parseNum(s)\`: Pre-injected helper. Generic parser — strips apostrophe thousands separators, comma→dot, strips %. Use for percentages, quantities and non-monetary numeric columns.
+Do NOT redefine \`parseMoney\` or \`parseNum\` — they are already available as globals.
 Do NOT use \`window\`, \`import\`, or \`require\`. Do NOT call APIs not listed in AVAILABLE EXTERNAL APIs.`
 
   const refinementRules = `\
@@ -182,7 +185,7 @@ Then follow these principles:
 NEVER hardcode any number, name, date or amount read from the conversation into the formula. Every value in \`data\` and \`html\` must come from parsing \`pdfText\` at runtime.
 
 *FORMAT REMINDER*:
-\`pdfText\` uses \` | \` as the column separator (never plain spaces). Section detection: \`t.trim().startsWith('keyword')\` — never \`===\`, never \`&&\` across two keywords. Numbers: strip apostrophe thousands separators and percent signs before \`parseFloat\`.
+\`pdfText\` uses \` | \` as the column separator (never plain spaces). Section detection: \`t.trim().startsWith('keyword')\` — never \`===\`, never \`&&\` across two keywords. For monetary columns (debit, credit, balance, amount, total, price…) always use the pre-injected \`parseMoney(s)\` — it validates the format and rejects non-monetary numbers (account numbers, reference codes, phone numbers). For other numeric columns use the pre-injected \`parseNum(s)\`. Never call \`parseFloat\` directly on raw column values.
 ${otherDatasets.length > 0 ? `\n# OTHER OPEN DATASETS (tabular)\n${datasetsSection}` : ''}` : columns.length > 0 ? `\
 # ACTIVE DATA CONTEXT
 Tab: "${Object.keys(datasets).find(k => datasets[k] === rows) ?? ''}"
@@ -249,10 +252,8 @@ ${exampleAnalysis.formula.split('\n').slice(0, 160).join('\n')}
 Adapt: section keywords, NOISE set, column end-offsets (-N), and the isDataRow test.
 \`\`\`js
 try {
-  const parseNum = s => {
-    if (!s) return NaN;
-    return parseFloat(s.replace(/'/g, '').replace(/,/g, '.').replace(/%/g, '').trim());
-  };
+  // parseMoney and parseNum are pre-injected globals — do NOT redefine them.
+  // Use parseMoney for debit/credit/balance/amount columns, parseNum for quantities/percentages.
 
   // Static labels to skip — column headers and navigation text that repeat on every page.
   // Identify them by reading pdfText; they are always the same string across documents.
@@ -583,6 +584,20 @@ window.addEventListener('message', function(e) {
     else { p.res(new Response(d.body, { status: d.status, statusText: d.statusText, headers: new Headers(d.headers || {}) })); }
   }
 });
+function parseMoney(s) {
+  if (!s) return NaN;
+  var sign = /^\s*-/.test(s) ? -1 : 1;
+  var clean = s.trim().replace(/^[+-]\s*/, '').replace(/[€$£₹¥F*†‡°]+/g, '').trim();
+  if (/\d{7,}/.test(clean.replace(/[\s.,]/g, ''))) return NaN;
+  if (clean.indexOf('/') !== -1) return NaN;
+  if (/[a-zA-Z]/.test(clean)) return NaN;
+  var v = parseFloat(clean.replace(/[\s ]/g, '').replace(/,/g, '.'));
+  return isNaN(v) ? NaN : sign * v;
+}
+function parseNum(s) {
+  if (!s) return NaN;
+  return parseFloat(String(s).replace(/'/g, '').replace(/,/g, '.').replace(/%/g, '').trim());
+}
 function __runFormula() {
   (async () => {
     const data = ${dataJson};
@@ -595,8 +610,8 @@ function __runFormula() {
     };
     const root = document.getElementById('r');
     try {
-      const fn = new (Object.getPrototypeOf(async function(){}).constructor)('data', 'datasets', 'echarts', 'L', 'console', 'XLSX', 'jsPDF', 'pdfData', 'pdfjsLib', 'pdfText', ${formulaJson});
-      const result = await fn(data, datasets, typeof echarts !== 'undefined' ? echarts : undefined, typeof L !== 'undefined' ? L : undefined, mock, typeof XLSX !== 'undefined' ? XLSX : undefined, window.jspdf ? window.jspdf.jsPDF : undefined, __pdfData, typeof pdfjsLib !== 'undefined' ? pdfjsLib : undefined, pdfText);
+      const fn = new (Object.getPrototypeOf(async function(){}).constructor)('data', 'datasets', 'echarts', 'L', 'console', 'XLSX', 'jsPDF', 'pdfData', 'pdfjsLib', 'pdfText', 'parseMoney', 'parseNum', ${formulaJson});
+      const result = await fn(data, datasets, typeof echarts !== 'undefined' ? echarts : undefined, typeof L !== 'undefined' ? L : undefined, mock, typeof XLSX !== 'undefined' ? XLSX : undefined, window.jspdf ? window.jspdf.jsPDF : undefined, __pdfData, typeof pdfjsLib !== 'undefined' ? pdfjsLib : undefined, pdfText, parseMoney, parseNum);
       if (result && result.html) root.innerHTML = result.html;
       parent.postMessage({ t: 'done', data: (result && result.data !== undefined) ? result.data : null }, '*');
     } catch (err) {
