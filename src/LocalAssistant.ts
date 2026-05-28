@@ -177,15 +177,18 @@ Do NOT use \`data\` (empty). \`pdfData\` + \`pdfjsLib\` are available for raw po
 Before writing any formula, read the pdfText carefully to understand: which sections exist, where the relevant table is, what the column headers are, and what a data row looks like vs. a header or subtotal row.
 
 Then follow these principles:
-1. **Navigate using static content only** — section titles, column headers, and category labels are identical across every instance of this document type. Use \`line.trim().startsWith('...')\` or \`line.includes('...')\` on those fixed strings to locate sections and identify row types. Never use dynamic values (amounts, names, dates) as navigation anchors, and never hardcode them in the formula.
-2. **Two-pass algorithm** — first pass: iterate lines and classify each one (data row, category header, noise). Second pass: iterate the classified lines to extract structured data. This separation makes the logic clearer and avoids fragile one-pass heuristics.
-3. **Ask when uncertain** — if the section title, column order, or row structure is ambiguous from the pdfText, ask the user for clarification before writing the formula. A wrong assumption wastes a round-trip. Example: "I can see columns [Description | Qty | Price | Total] — which values do you need?"
+1. **Two-pass algorithm** — this is the most important rule. First pass: iterate lines and classify each one (data row, category header, noise) without extracting values. Second pass: iterate the classified lines to build structured output. Never try to both detect and extract in the same pass — it produces fragile, unmaintainable heuristics.
+2. **Use regex for all pattern matching** — section boundaries, row detection, value extraction: always use a regex, not \`includes\` or \`startsWith\`. The \`i\` flag handles the mixed-case output that PDF extractors produce (e.g. \`/totaux des mouvements/i\` matches \`totauX des mouvements\`). Use named capture groups for structured extraction: \`const m = t.match(/(?<date>\\d{2}\\/\\d{2}\\/\\d{2,4})\\s*\\|\\s*(?<val>\\S+)/)\`. This is how you reliably find patterns in noisy text.
+3. **Preserve indentation for line classification** — iterate as \`const raw = lines[i]\`, \`const t = raw.trimEnd()\` (NOT \`.trim()\`). Leading spaces carry depth information: \`const depth = raw.match(/^ */)[0].length\`. Indented lines are continuations of the current row; non-indented lines before a data row are "pending" descriptors for the next row.
+4. **Detect column structure from the header row** — locate the line matching the column headers (e.g. \`/date.*valeur.*nature/i\`) and split it to determine how many columns to expect. Use that count to read amounts end-to-last rather than hardcoding indices.
+5. **Navigate using static content only** — use fixed section titles, column headers, and category labels as anchors. Never use dynamic values (amounts, names, dates) as navigation anchors, and never hardcode them in the formula.
+6. **Ask when uncertain** — if the section title, column order, or row structure is ambiguous from the pdfText, ask before writing. A wrong assumption wastes a round-trip. Example: "I can see columns [Description | Qty | Price | Total] — which values do you need?"
 
 *DYNAMIC EXTRACTION ONLY*:
 NEVER hardcode any number, name, date or amount read from the conversation into the formula. Every value in \`data\` and \`html\` must come from parsing \`pdfText\` at runtime.
 
 *FORMAT REMINDER*:
-\`pdfText\` uses \` | \` as the column separator (never plain spaces). Section detection: \`t.trim().startsWith('keyword')\` — never \`===\`, never \`&&\` across two keywords. For monetary columns (debit, credit, balance, amount, total, price…) always use the pre-injected \`parseMoney(s)\` — it validates the format and rejects non-monetary numbers (account numbers, reference codes, phone numbers). For other numeric columns use the pre-injected \`parseNum(s)\`. Never call \`parseFloat\` directly on raw column values.
+\`pdfText\` uses \` | \` as the column separator (never plain spaces). Use regex for all detection — section boundaries with the \`i\` flag (e.g. \`/totaux des mouvements/i\`), row types with capture groups. Never use \`===\`, plain \`includes\`, or \`startsWith\` on document keywords — PDF extraction produces mixed-case output that will silently break exact matches. For monetary columns (debit, credit, balance, amount, total, price…) always use the pre-injected \`parseMoney(s)\` — it validates format and rejects account numbers, reference codes, phone numbers. For other numeric columns use the pre-injected \`parseNum(s)\`. Never call \`parseFloat\` directly on raw column values.
 ${otherDatasets.length > 0 ? `\n# OTHER OPEN DATASETS (tabular)\n${datasetsSection}` : ''}` : columns.length > 0 ? `\
 # ACTIVE DATA CONTEXT
 Tab: "${Object.keys(datasets).find(k => datasets[k] === rows) ?? ''}"
@@ -267,22 +270,22 @@ try {
     const t = raw.trimEnd();
     if (!t.trim() || t.startsWith('## Page')) continue;
 
-    // Use startsWith on the static section title — never === and never &&
-    if (!inSection && t.trim().startsWith('SECTION TITLE'))      { inSection = true; continue; }
-    if (inSection  && t.trim().startsWith('NEXT SECTION TITLE')) { inSection = false; break; }
+    // Always use regex with i flag — PDF extraction produces mixed-case text
+    if (!inSection && /SECTION TITLE/i.test(t))      { inSection = true; continue; }
+    if (inSection  && /NEXT SECTION TITLE/i.test(t)) { inSection = false; break; }
     if (!inSection) continue;
 
     const cols  = t.trim().split(' | ');
-    const label = cols[0].replace(/ \\(suite\\)$/, '').trim(); // strip " (suite)" continuations
+    const label = cols[0].replace(/ \\(suite\\)$/i, '').trim(); // strip " (suite)" continuations
 
     if (NOISE.has(label)) continue;
 
     // isDataRow  — first column starts with a digit or apostrophe (quantity-led rows)
     // isHeader   — no leading digit AND multiple columns (static category / sub-category label)
-    // isTotal    — known static total label (adapt to your document)
+    // isTotal    — regex with i flag so mixed-case PDF output still matches
     const isDataRow = /^[\\d']/.test(label);
     const isHeader  = !isDataRow && cols.length > 1;
-    const isTotal   = label === 'Total' || label.startsWith('Total ');
+    const isTotal   = /^total\\b/i.test(label);
 
     lines.push({ label, cols, isDataRow, isHeader, isTotal });
   }
