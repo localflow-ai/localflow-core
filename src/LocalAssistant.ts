@@ -4,7 +4,7 @@ import type {
   ConversationTurn, ApiConfig, ApiPreference, ActivatedApi,
   AnalysisMatchHook, AnalysisMatchContext, AnalysisMatchResult,
 } from './types'
-import type { ProxyClient } from './ProxyClient'
+import type { Proxy } from './Proxy'
 // Gray scale used only inside the analysis sandbox (Tailwind config injection).
 // Not exported — these neutrals match the default dark palette; apps can override
 // the body background/foreground via LocalAssistantConfig.sandboxDarkVars or let
@@ -664,7 +664,7 @@ export class LocalAssistant {
   }
 
   /** Access the proxy client (e.g. for manual encrypt/decrypt or session checks). */
-  get proxy(): ProxyClient { return this._config.proxy }
+  get proxy(): Proxy { return this._config.proxy }
 
   get darkMode(): boolean { return this._config.darkMode ?? false }
   set darkMode(v: boolean) { this._config.darkMode = v }
@@ -806,11 +806,7 @@ export class LocalAssistant {
   /** Fetch available APIs from the proxy and store them internally. */
   async fetchApiConfigs(): Promise<ApiConfig[]> {
     try {
-      const res = await fetch(`${this._config.proxy.baseUrl}/common/api-config`, {
-        headers: this._authHeaders(),
-      })
-      if (!res.ok) return []
-      this._apiConfigs = await res.json()
+      this._apiConfigs = await this._config.proxy.getApiConfigs()
       this._emit('configs:change', [...this._apiConfigs])
       return this._apiConfigs
     } catch { return [] }
@@ -987,22 +983,18 @@ export class LocalAssistant {
       }
     }
 
-    const res = await fetch(`${this._config.proxy.baseUrl}/common/genai`, {
-      method: 'POST',
-      headers: this._authHeaders(),
-      body: JSON.stringify({
-        encryptedApiKey: this._config.llm.apiKey ?? '',
-        model: this._config.llm.model ?? 'gemini-3-flash-preview',
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: [
-          ...this._history,
-          { role: 'user', parts: [{ text: llmMessage }] },
-        ],
-        generation_config: {
-          thinking_config: { thinking_level: 'high', include_thoughts: true },
-          temperature: 0.7,
-        },
-      }),
+    const res = await this._config.proxy.callGenai({
+      encryptedApiKey: this._config.llm.apiKey ?? '',
+      model: this._config.llm.model ?? 'gemini-3-flash-preview',
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: [
+        ...this._history,
+        { role: 'user', parts: [{ text: llmMessage }] },
+      ],
+      generation_config: {
+        thinking_config: { thinking_level: 'high', include_thoughts: true },
+        temperature: 0.7,
+      },
     })
 
     if (!res.ok) {
@@ -1123,9 +1115,6 @@ export class LocalAssistant {
     const headers: Record<string, string> = { ...opts.headers }
     if (matched?.encryptedUserKey) headers['X-Proxy-API-Key'] = matched.encryptedUserKey
 
-    const proxyUrl = new URL(`${this._config.proxy.baseUrl}/common/api-proxy`)
-    proxyUrl.searchParams.set('url', url)
-
     // Emit 'api:blocked' when a URL that isn't in the activated API list fails.
     // Covers both HTTP error responses and network-level errors (CORS, timeout, etc.)
     const emitIfUnmatched = () => {
@@ -1144,11 +1133,7 @@ export class LocalAssistant {
 
     let res: Response
     try {
-      res = await fetch(proxyUrl.toString(), {
-        method,
-        headers: { ...headers, 'X-Proxy-Token': `Bearer ${this._config.proxy.token ?? ''}` },
-        body: opts.body || undefined,
-      })
+      res = await this._config.proxy.proxyApiCall(url, method, headers, opts.body)
     } catch (err) {
       emitIfUnmatched()
       this._emit('data:api-proxy', { url, method, body: opts.body ?? null, apiConfig })
@@ -1283,14 +1268,6 @@ export class LocalAssistant {
   // -------------------------------------------------------------------------
   // Private
   // -------------------------------------------------------------------------
-
-  private _authHeaders(): Record<string, string> {
-    const token = this._config.proxy.token
-    return {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    }
-  }
 
   private _emit(event: string, ...args: unknown[]): void {
     this._listeners.get(event)?.forEach(fn => {

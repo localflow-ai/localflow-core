@@ -1,9 +1,10 @@
-import type { CrmObjectType } from './types'
+import type { ApiConfig, CrmObjectType } from './types'
+import type { Proxy, GenaiPayload } from './Proxy'
 
 /**
- * LocalFlow proxy client — session management, key encryption, and CRM data access.
+ * LocalFlow proxy client — delegates all requests to a running LocalFlow proxy server.
  */
-export class ProxyClient {
+export class ProxyClient implements Proxy {
   baseUrl: string
   token: string | null
 
@@ -14,7 +15,6 @@ export class ProxyClient {
 
   isConnected(): boolean { return !!this.token }
 
-  /** Authenticate with the proxy and store the session token. */
   async connect(type = 'odoo', config: Record<string, unknown> = {}): Promise<void> {
     const res = await fetch(`${this.baseUrl}/session`, {
       method: 'POST',
@@ -26,13 +26,11 @@ export class ProxyClient {
     this.token = data.token
   }
 
-  /** Check the current session. Throws if not authenticated or session expired. */
   async getSessionInfo(): Promise<unknown> {
     const res = await fetch(`${this.baseUrl}/session`, { headers: this._headers() })
     return this._handle(res)
   }
 
-  /** Returns true if the string is in the proxy-encrypted IV:Tag:Ciphertext format. */
   isEncrypted(str: string): boolean {
     const parts = str.split(':')
     if (parts.length !== 3) return false
@@ -41,7 +39,6 @@ export class ProxyClient {
     return iv.length === 24 && tag.length === 32 && isHex(iv) && isHex(tag)
   }
 
-  /** Encrypt a plaintext string via the proxy's /common/encrypt endpoint. */
   async encryptMessage(message: string): Promise<string> {
     const res = await fetch(`${this.baseUrl}/common/encrypt`, {
       method: 'POST',
@@ -52,7 +49,6 @@ export class ProxyClient {
     return data.encrypted ?? data.message ?? ''
   }
 
-  /** Decrypt a proxy-encrypted string via the proxy's /common/decrypt endpoint. */
   async decryptMessage(message: string): Promise<string> {
     const res = await fetch(`${this.baseUrl}/common/decrypt`, {
       method: 'POST',
@@ -63,11 +59,37 @@ export class ProxyClient {
     return data.decrypted ?? data.message ?? ''
   }
 
-  // ---------------------------------------------------------------------------
-  // Document processing
-  // ---------------------------------------------------------------------------
+  async callGenai(payload: GenaiPayload): Promise<Response> {
+    return fetch(`${this.baseUrl}/common/genai`, {
+      method: 'POST',
+      headers: this._headers(),
+      body: JSON.stringify(payload),
+    })
+  }
 
-  /** Extract text from a PDF via the proxy's /common/extract-pdf endpoint. */
+  async getApiConfigs(): Promise<ApiConfig[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/common/api-config`, { headers: this._headers() })
+      if (!res.ok) return []
+      return res.json()
+    } catch { return [] }
+  }
+
+  async proxyApiCall(
+    url: string,
+    method: string,
+    headers: Record<string, string>,
+    body: string | null,
+  ): Promise<Response> {
+    const proxyUrl = new URL(`${this.baseUrl}/common/api-proxy`)
+    proxyUrl.searchParams.set('url', url)
+    return fetch(proxyUrl.toString(), {
+      method,
+      headers: { ...headers, 'X-Proxy-Token': `Bearer ${this.token ?? ''}` },
+      body: body ?? undefined,
+    })
+  }
+
   async extractPdf(buffer: ArrayBuffer, searchString?: string): Promise<{ text: string; pageCount: number }> {
     if (!this.token) throw new Error('Not authenticated')
     const url = new URL(`${this.baseUrl}/common/extract-pdf`)
@@ -91,23 +113,16 @@ export class ProxyClient {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // CRM
-  // ---------------------------------------------------------------------------
-
-  /** List all CRM object types (without fields — use getObjectMetadata for fields). */
   async listObjectTypes(): Promise<CrmObjectType[]> {
     const res = await fetch(`${this.baseUrl}/metadata`, { headers: this._headers() })
     return this._handle(res) as Promise<CrmObjectType[]>
   }
 
-  /** Fetch full metadata for one object type, including its fields. */
   async getObjectMetadata(objectType: string): Promise<CrmObjectType> {
     const res = await fetch(`${this.baseUrl}/metadata/${encodeURIComponent(objectType)}`, { headers: this._headers() })
     return this._handle(res) as Promise<CrmObjectType>
   }
 
-  /** Fetch rows for a CRM object type. */
   async getData(objectType: string, fields: string[]): Promise<Record<string, unknown>[]> {
     const params = new URLSearchParams({ fields: fields.join(',') })
     const res = await fetch(`${this.baseUrl}/data/${encodeURIComponent(objectType)}?${params}`, {
@@ -116,8 +131,6 @@ export class ProxyClient {
     const result = await this._handle(res) as Record<string, unknown>
     return (result.records ?? result) as Record<string, unknown>[]
   }
-
-  // Protected so subclasses can make authenticated requests without duplicating auth logic
 
   protected _headers(): Record<string, string> {
     if (!this.token) throw new Error('Not authenticated')

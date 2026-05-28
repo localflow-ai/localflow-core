@@ -1,6 +1,9 @@
 export { LocalAssistant } from './LocalAssistant'
 export { ProxyClient } from './ProxyClient'
+export { LocalProxy } from './LocalProxy'
 export { hasApiKey } from './types'
+export type { Proxy, GenaiPayload } from './Proxy'
+export type { LocalProxyConfig } from './LocalProxy'
 export type {
   LocalAssistantConfig,
   ResultContainer,

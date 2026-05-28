@@ -16,7 +16,7 @@ export interface LLMConfig {
 // Component configuration
 // ---------------------------------------------------------------------------
 
-import type { ProxyClient } from './ProxyClient'
+import type { Proxy } from './Proxy'
 
 /**
  * Where the assistant renders formula results.
@@ -25,8 +25,8 @@ import type { ProxyClient } from './ProxyClient'
 export type ResultContainer = HTMLElement | string | (() => HTMLElement | null)
 
 export interface LocalAssistantConfig {
-  /** Authenticated proxy client — created via `new ProxyClient(url)` then `await proxy.connect(...)`. */
-  proxy: ProxyClient
+  /** Proxy instance — use ProxyClient for a real server or LocalProxy for standalone/dev mode. */
+  proxy: Proxy
   llm: LLMConfig
   darkMode?: boolean
   /**
