@@ -59,7 +59,7 @@ export interface LocalAssistantConfig {
 
 export interface DatasetEntry {
   name: string
-  rows: Record<string, unknown>[]
+  rows: object[]
   columns: string[]
 }
 

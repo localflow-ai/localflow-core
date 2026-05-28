@@ -683,8 +683,8 @@ export class LocalAssistant {
   // Dataset management
   // -------------------------------------------------------------------------
 
-  addDataset(name: string, rows: Record<string, unknown>[]): void {
-    this._datasets.set(name, { type: 'table', rows })
+  addDataset(name: string, rows: object[]): void {
+    this._datasets.set(name, { type: 'table', rows: rows as Record<string, unknown>[] })
     if (this._datasets.size === 1) this._activeDatasetName = name
     this._emit('dataset:change')
   }
@@ -704,9 +704,9 @@ export class LocalAssistant {
     this._emit('dataset:change')
   }
 
-  updateDataset(name: string, rows: Record<string, unknown>[]): void {
+  updateDataset(name: string, rows: object[]): void {
     if (this._datasets.has(name)) {
-      this._datasets.set(name, { type: 'table', rows })
+      this._datasets.set(name, { type: 'table', rows: rows as Record<string, unknown>[] })
       this._emit('dataset:change')
     }
   }
