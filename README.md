@@ -1,48 +1,46 @@
-# LocalFlow Core — Local-first AI Library
+# LocalFlow Core — Metadata-first AI Framework
 
 > **Apache 2.0 License** — See [LICENSE](#license) at the bottom of this file.
 
 ---
 
-## What is Local-first AI?
+## What is Metadata-first AI?
 
-In its strict definition, local-first AI means running the AI model itself in the browser, making inference local so that your data never leaves your device. The appeal is real: no cloud dependency, no data sent to a third party, full privacy by default.
+In **metadata-first AI**, only metadata about your data ever reaches the LLM — column names, statistical samples, document structure. The actual rows, values, and documents stay on your machine. The model acts as a **code generator**: given a description of the data's shape, it writes analysis code that executes locally in a sandbox on your real data.
 
-In practice, however, this approach faces significant limitations:
+This is a different axis than the two approaches usually discussed:
 
-- **Model quality** — browser-based models are considerably weaker than cloud models, especially for complex tasks like code generation or structured reasoning. The gap is narrowing, but remains wide enough to matter for production use: a hallucination in a code generator produces a formula that silently computes the wrong result.
-- **Scalability** — running a capable LLM locally demands a powerful, typically GPU-equipped device, raising the barrier for end users. Every query runs a full model pass on the user's device, which is rarely as energy-efficient as an optimised data centre — a green IT cost that is easy to overlook, and that compounds with usage.
-- **External data access** — the strict vision focuses on where inference runs, but does not address how the AI can securely access external data sources (APIs, CRMs, ERPs). In practice, user queries often require outside services, and there is no built-in mechanism to do so in a controlled, auditable way.
+- **Classical cloud AI** — sends raw data to the model. Powerful and flexible, but your data leaves your environment and every result is a fresh inference, non-deterministic by nature.
+- **Local-model AI** (Ollama, llama.cpp, etc.) — runs the model on your device so data stays local, but you are constrained by what fits on your hardware, and results remain non-deterministic.
 
-**LocalFlow proposes a slightly "relaxed" vision of local-first AI to overcome these issues.** Rather than constraining *where inference happens*, it constrains *what data inference ever sees*. The LLM acts as a one-time, data-blind code generator — only structural metadata (column names, statistical samples, document layout) is sent to the model. The generated code then executes locally in a sandboxed environment, on your actual data, producing deterministic results.
+Metadata-first AI makes the constraint explicit: **only metadata crosses the inference boundary** — raw data never does. When using a cloud LLM, metadata (column names, statistics, document structure) does leave your machine, which is an acceptable exposure for most organisations. For the strictest privacy requirements, combining metadata-first AI with a self-hosted LLM eliminates even that: nothing crosses your infrastructure boundary. The generated code runs deterministically in your browser on your real data.
 
-This relaxation is principled: the sensitive asset is your data, not the model. As long as raw data never reaches the LLM, the privacy guarantee holds — regardless of whether inference runs in the cloud, on your own server, or in the browser. A self-hosted LLM achieves the same guarantees as the strict approach while remaining free to use the strongest model available. The two visions are fully compatible and can be combined.
+| | Classical cloud AI | Local-model AI | Metadata-first AI |
+|---|---|---|---|
+| Raw data stays local | ❌ | ✅ | ✅ |
+| Metadata stays local | ❌ | ✅ | ⚠️ cloud / ✅ self-hosted |
+| Computation executes locally | ❌ | ✅ | ✅ |
+| Uses best available models | ✅ | Limited | ✅ |
+| Compatible with self-hosted LLMs | ✅ | ✅ | ✅ |
+| Results are deterministic | ❌ | ❌ | ✅ |
+| Re-runs without extra AI tokens | ❌ | ❌ | ✅ |
+| Works on large datasets | ✅ | Limited | ✅ |
 
-| | Strict local-first AI | LocalFlow local-first AI |
-|---|---|---|
-| Raw data stays local | ✅ | ✅ |
-| Computation executes locally | ✅ | ✅ |
-| Uses best available models | ❌ | ✅ |
-| Compatible with self-hosted LLMs | ✅ | ✅ |
-| Results are deterministic | ❌ | ✅ |
-| Re-runs without extra AI tokens | ❌ | ✅ |
-| Works on large datasets | Limited | ✅ |
+### The metadata boundary
 
-### The LLM as a one-time code generator
+LocalFlow defines precisely what constitutes metadata for each data type:
 
-With LocalFlow's local-first AI, the LLM acts as a **code generator**, not a data processor. As little as possible is sent to make that generation work:
-
-- **Structured data** (CSV, Excel, CRM): column headers and statistical samples are enough for the LLM to write correct analysis code. Raw rows are never sent.
+- **Structured data** (CSV, Excel, CRM): column headers and statistical samples — enough for the LLM to write correct analysis code. Raw rows are never sent.
 - **Documents** (PDF): the extracted text is needed so the LLM understands the document's structure and can write a reliable parser. Users can work with obfuscated or template documents to generate formulas, then run them locally on real documents — the LLM only needs the structure, not the actual values.
 
-### Transparent two-step process
+### Two-step execution
 
 Code generation (step 1) and local execution (step 2) are invisible to the user — the assistant behaves like a regular AI assistant. The difference is that **generated analyses can be saved and re-run** on any compatible dataset without making another LLM call.
 
 ### Key properties
 
 1. **Full AI power** — use the best available LLM to analyse complex, heterogeneous data
-2. **Data safety** — sensitive data stays local even when using a cloud LLM; a self-hosted LLM removes the last network hop entirely
+2. **Data safety** — raw data never reaches the LLM. Metadata (schema, statistics) leaves only for code generation; a self-hosted LLM removes even that exposure
 3. **No hallucinated results** — outputs are computed from real data by deterministic code, not inferred by the model
 4. **Scalable** — once generated, run the same analysis on large datasets as many times as needed, consuming no additional AI tokens
 5. **Explainable** — the generated code is fully inspectable; any AI can explain why a formula works or debug why it fails
@@ -95,7 +93,7 @@ Code generation (step 1) and local execution (step 2) are invisible to the user 
 
 ### Limitations
 
-Because the LLM only ever sees structural metadata — never the actual rows — there are tasks that LocalFlow's local-first approach cannot perform on its own. Inference excels at understanding natural language, translating free-form content, summarising documents, or spotting patterns across raw text. When those capabilities need to operate on the full dataset, a classical AI pipeline (one that sends the data to the model) remains the right tool.
+Because the LLM only ever sees metadata — never the actual rows — there are tasks that a metadata-first approach cannot perform on its own. Inference excels at understanding natural language, translating free-form content, summarising documents, or spotting patterns across raw text. When those capabilities need to operate on the full dataset, a classical AI pipeline (one that sends the data to the model) remains the right tool.
 
 LocalFlow is therefore a **complement to classical AI, not a replacement**. It opens up use cases that are out of reach for classical AI — large-scale data analysis without privacy exposure, deterministic and repeatable results, scalable execution at zero marginal AI cost — while leaving room for classical approaches where they are genuinely needed.
 
@@ -117,7 +115,7 @@ npm install localflow-core
 
 ### 2. Set up the proxy
 
-The assistant requires a [LocalFlow proxy](https://github.com/localflow-ai/localflow-proxy) instance. The proxy is the mandatory network gateway for the local-first AI sandbox — all outbound calls from formula execution pass through it. It handles:
+The assistant requires a [LocalFlow proxy](https://github.com/localflow-ai/localflow-proxy) instance. The proxy is the mandatory network gateway for the metadata-first AI sandbox — all outbound calls from formula execution pass through it. It handles:
 
 - **Security and session management** — authenticates users against your business systems (CRM, ERP, or guest sessions), manages session tokens, and encrypts API keys so secrets are never exposed to the browser
 - **API governance** — defines which external APIs formulas may call; supports BYOK, per-source throttling, URL whitelisting, and OAuth 2.0 token exchange

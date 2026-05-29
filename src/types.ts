@@ -51,6 +51,12 @@ export interface LocalAssistantConfig {
    * At minimum, '--background' and '--foreground' are used for the sandbox body.
    */
   sandboxDarkVars?: Record<string, string>
+  /**
+   * When true, the first formula generated for a new PDF is silently executed,
+   * its logs are collected, and a second LLM call revises the formula before
+   * anything is shown to the user. Disabled by default.
+   */
+  pdfFormulaRevision?: boolean
 }
 
 // ---------------------------------------------------------------------------

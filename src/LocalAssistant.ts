@@ -120,9 +120,10 @@ The formula runs as the body of an async function. The following globals are inj
 - \`jsPDF\`: jsPDF 2.x constructor. Use it **only when the user explicitly asks for a PDF file**. Create structured multi-page PDFs with text, shapes, images and tables. Page numbers: iterate pages and call \`doc.text('Page X / Y', x, y)\`. To download: \`doc.save('filename.pdf')\`.
 ${activeDatasetType === 'pdf' ? `- \`pdfData\`: Uint8Array — raw bytes of the active PDF document.
 - \`pdfjsLib\`: PDF.js 3.x — use it to parse the PDF. Worker is disabled for sandbox compatibility (all parsing runs in the main thread).` : ''}
-- \`parseMoney(s)\`: Pre-injected helper. Parses a monetary amount string: strips currency symbols, footnote markers and leading sign (+/-). Returns NaN for non-monetary strings (account numbers with 7+ consecutive digits, codes containing '/', strings with letters). Always use for columns relating to price, amount, debit, credit, balance, total, or value.
-- \`parseNum(s)\`: Pre-injected helper. Generic parser — strips apostrophe thousands separators, comma→dot, strips %. Use for percentages, quantities and non-monetary numeric columns.
-Do NOT redefine \`parseMoney\` or \`parseNum\` — they are already available as globals.
+- \`parseMoney(s)\`: use for any monetary column (debit, credit, balance, amount, price, total). Returns NaN for non-monetary strings (account numbers, codes with '/', strings with letters) — safe to call on every column value.
+- \`parseNum(s)\`: use for other numeric columns (quantities, percentages, counts). Does not validate format.
+- \`splitCols(line)\`: splits a pipe-separated pdfText line into a trimmed array of column strings.
+Do NOT redefine \`parseMoney\`, \`parseNum\`, or \`splitCols\` — they are already available as globals.
 Do NOT use \`window\`, \`import\`, or \`require\`. Do NOT call APIs not listed in AVAILABLE EXTERNAL APIs.`
 
   const refinementRules = `\
@@ -191,7 +192,7 @@ Then follow these principles:
 NEVER hardcode any number, name, date or amount read from the conversation into the formula. Every value in \`data\` and \`html\` must come from parsing \`pdfText\` at runtime.
 
 *FORMAT REMINDER*:
-\`pdfText\` uses \` | \` as the column separator (never plain spaces). Use regex for all detection — section boundaries with the \`i\` flag (e.g. \`/totaux des mouvements/i\`), row types with capture groups. Never use \`===\`, plain \`includes\`, or \`startsWith\` on document keywords — PDF extraction produces mixed-case output that will silently break exact matches. For monetary columns (debit, credit, balance, amount, total, price…) always use the pre-injected \`parseMoney(s)\` — it validates format and rejects account numbers, reference codes, phone numbers. For other numeric columns use the pre-injected \`parseNum(s)\`. Never call \`parseFloat\` directly on raw column values.
+\`pdfText\` uses \` | \` as the column separator (never plain spaces). Use regex for all detection — section boundaries with the \`i\` flag (e.g. \`/totaux des mouvements/i\`), row types with capture groups. Never use \`===\`, plain \`includes\`, or \`startsWith\` on document keywords — PDF extraction produces mixed-case output that will silently break exact matches. To split a line into columns always use the pre-injected \`splitCols(line)\` — never \`line.split(' | ')\` directly (trailing-space differences cause silent column-count bugs). For monetary columns (debit, credit, balance, amount, total, price…) always use the pre-injected \`parseMoney(s)\` — it validates format and rejects account numbers, reference codes, phone numbers. For other numeric columns use the pre-injected \`parseNum(s)\`. Never call \`parseFloat\` directly on raw column values.
 ${otherDatasets.length > 0 ? `\n# OTHER OPEN DATASETS (tabular)\n${datasetsSection}` : ''}` : columns.length > 0 ? `\
 # ACTIVE DATA CONTEXT
 Tab: "${Object.keys(datasets).find(k => datasets[k] === rows) ?? ''}"
@@ -258,7 +259,8 @@ ${exampleAnalysis.formula.split('\n').slice(0, 160).join('\n')}
 Adapt: section keywords, NOISE set, column end-offsets (-N), and the isDataRow test.
 \`\`\`js
 try {
-  // parseMoney and parseNum are pre-injected globals — do NOT redefine them.
+  // parseMoney, parseNum, and splitCols are pre-injected globals — do NOT redefine them.
+  // Use splitCols(line) to split any pdfText line into columns (handles trailing-pipe edge cases).
   // Use parseMoney for debit/credit/balance/amount columns, parseNum for quantities/percentages.
 
   // Static labels to skip — column headers and navigation text that repeat on every page.
@@ -278,7 +280,7 @@ try {
     if (inSection  && /NEXT SECTION TITLE/i.test(t)) { inSection = false; break; }
     if (!inSection) continue;
 
-    const cols  = t.trim().split(' | ');
+    const cols  = splitCols(t);
     const label = cols[0].replace(/ \\(suite\\)$/i, '').trim(); // strip " (suite)" continuations
 
     if (NOISE.has(label)) continue;
@@ -597,12 +599,15 @@ function parseMoney(s) {
   if (/\d{7,}/.test(clean.replace(/[\s.,]/g, ''))) return NaN;
   if (clean.indexOf('/') !== -1) return NaN;
   if (/[a-zA-Z]/.test(clean)) return NaN;
-  var v = parseFloat(clean.replace(/[\s ]/g, '').replace(/,/g, '.'));
+  var v = parseFloat(clean.replace(/[^0-9,.]/g, '').replace(/,/g, '.'));
   return isNaN(v) ? NaN : sign * v;
 }
 function parseNum(s) {
   if (!s) return NaN;
   return parseFloat(String(s).replace(/'/g, '').replace(/,/g, '.').replace(/%/g, '').trim());
+}
+function splitCols(s) {
+  return String(s || '').split('|').map(function(c){ return c.trim(); });
 }
 function __runFormula() {
   (async () => {
@@ -616,8 +621,8 @@ function __runFormula() {
     };
     const root = document.getElementById('r');
     try {
-      const fn = new (Object.getPrototypeOf(async function(){}).constructor)('data', 'datasets', 'echarts', 'L', 'console', 'XLSX', 'jsPDF', 'pdfData', 'pdfjsLib', 'pdfText', 'parseMoney', 'parseNum', ${formulaJson});
-      const result = await fn(data, datasets, typeof echarts !== 'undefined' ? echarts : undefined, typeof L !== 'undefined' ? L : undefined, mock, typeof XLSX !== 'undefined' ? XLSX : undefined, window.jspdf ? window.jspdf.jsPDF : undefined, __pdfData, typeof pdfjsLib !== 'undefined' ? pdfjsLib : undefined, pdfText, parseMoney, parseNum);
+      const fn = new (Object.getPrototypeOf(async function(){}).constructor)('data', 'datasets', 'echarts', 'L', 'console', 'XLSX', 'jsPDF', 'pdfData', 'pdfjsLib', 'pdfText', 'parseMoney', 'parseNum', 'splitCols', ${formulaJson});
+      const result = await fn(data, datasets, typeof echarts !== 'undefined' ? echarts : undefined, typeof L !== 'undefined' ? L : undefined, mock, typeof XLSX !== 'undefined' ? XLSX : undefined, window.jspdf ? window.jspdf.jsPDF : undefined, __pdfData, typeof pdfjsLib !== 'undefined' ? pdfjsLib : undefined, pdfText, parseMoney, parseNum, splitCols);
       if (result && result.html) root.innerHTML = result.html;
       parent.postMessage({ t: 'done', data: (result && result.data !== undefined) ? result.data : null }, '*');
     } catch (err) {
@@ -666,6 +671,7 @@ export class LocalAssistant {
   private _listeners: Map<string, Set<Function>> = new Map()
   private _iframe?: HTMLIFrameElement
   private _fetchListener?: (e: MessageEvent) => void
+  private _feedbackDoneFor: Set<string> = new Set()
 
   constructor(config: LocalAssistantConfig) {
     this._config = { ...config }
@@ -693,6 +699,9 @@ export class LocalAssistant {
 
   get darkMode(): boolean { return this._config.darkMode ?? false }
   set darkMode(v: boolean) { this._config.darkMode = v }
+
+  get pdfFormulaRevision(): boolean { return this._config.pdfFormulaRevision ?? false }
+  set pdfFormulaRevision(v: boolean) { this._config.pdfFormulaRevision = v }
 
   get resultContainer(): ResultContainer | undefined { return this._config.resultContainer }
   set resultContainer(v: ResultContainer) { this._config.resultContainer = v }
@@ -881,6 +890,145 @@ export class LocalAssistant {
 
     this._pendingFormulaFeedback = parts.join('\n')
   }
+  // -------------------------------------------------------------------------
+  // PDF feedback loop
+  // -------------------------------------------------------------------------
+
+  shouldRunFeedbackLoop(pdfName: string): boolean {
+    return !!this._config.pdfFormulaRevision && !this._feedbackDoneFor.has(pdfName)
+  }
+
+  markFeedbackDone(pdfName: string): void {
+    this._feedbackDoneFor.add(pdfName)
+  }
+
+  /**
+   * Run a formula in a hidden off-screen iframe and return its console output.
+   * Handles fetch proxying and PDF document data so the formula behaves identically
+   * to the visible sandbox, but nothing is shown to the user.
+   */
+  runFormulaSilently(formula: string): Promise<string[]> {
+    return new Promise((resolve) => {
+      const logs: string[] = []
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText = 'position:fixed;left:-9999px;width:1px;height:1px;border:none;visibility:hidden'
+      for (const perm of this.sandboxPermissions) iframe.sandbox.add(perm)
+      iframe.srcdoc = this.buildSandboxDocument(formula)
+
+      const timeout = setTimeout(() => { cleanup(); resolve(logs) }, 30_000)
+
+      const listener = async (e: MessageEvent) => {
+        if (e.source !== iframe.contentWindow) return
+        const d = e.data
+        if (!d) return
+
+        if (d.t === 'done' || d.t === 'error') {
+          if (d.t === 'error') {
+            const msg = d.m ?? ''
+            logs.push(`ERROR: ${msg}`)
+            window.console.error('[formula]', msg)
+          }
+          clearTimeout(timeout)
+          cleanup()
+          resolve(logs)
+          return
+        }
+        if (d.t === 'log' || d.t === 'warn') {
+          const prefix = d.t === 'warn' ? 'WARN' : 'LOG'
+          const msg = d.m ?? ''
+          logs.push(`${prefix}: ${msg}`)
+          window.console[d.t === 'warn' ? 'warn' : 'log']('[formula]', msg)
+          return
+        }
+        if (d.t === 'ready') {
+          const buffer = this.getActivePdfBuffer()
+          if (buffer) iframe.contentWindow?.postMessage({ t: 'document-data', buffer }, '*')
+          return
+        }
+        if (d.t === 'fetch') {
+          const { id, url, method, headers, body } = d
+          try {
+            const res = await this.proxyFetch(url, { method, headers, body })
+            const resBody = await res.text()
+            const resHeaders: Record<string, string> = {}
+            res.headers.forEach((v: string, k: string) => { resHeaders[k] = v })
+            iframe.contentWindow?.postMessage(
+              { t: 'fetch-response', id, status: res.status, statusText: res.statusText, headers: resHeaders, body: resBody },
+              '*',
+            )
+          } catch (err) {
+            iframe.contentWindow?.postMessage(
+              { t: 'fetch-response', id, error: err instanceof Error ? err.message : String(err) },
+              '*',
+            )
+          }
+        }
+      }
+
+      function cleanup() {
+        window.removeEventListener('message', listener)
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe)
+      }
+
+      window.addEventListener('message', listener)
+      document.body.appendChild(iframe)
+    })
+  }
+
+  /**
+   * Silently calls the LLM to revise a formula based on its runtime console output.
+   * Does NOT modify conversation history — this is a transparent background round-trip.
+   * Returns the revised formula string, or null if revision failed / no formula returned.
+   */
+  async reviseFormula(formula: string, logs: string[]): Promise<string | null> {
+    const logBlock = logs.length > 0
+      ? (logs.length <= 200
+          ? logs.join('\n')
+          : logs.slice(0, 100).join('\n') + '\n... (truncated) ...\n' + logs.slice(-100).join('\n'))
+      : '(no console output — formula may be missing the required console.log statements)'
+
+    const revisionMessage = [
+      'The formula you just generated was executed in the sandbox. Here are the runtime logs:',
+      '',
+      '```',
+      logBlock,
+      '```',
+      '',
+      'Inspect the logs and return the improved formula taking the logs into account.',
+    ].join('\n')
+
+    try {
+      const res = await this._config.proxy.callGenai({
+        encryptedApiKey: this._config.llm.apiKey ?? '',
+        model: this._config.llm.model ?? 'gemini-3-flash-preview',
+        system_instruction: { parts: [{ text: this._lastSystemPrompt }] },
+        contents: [
+          ...this._history,
+          { role: 'user', parts: [{ text: revisionMessage }] },
+        ],
+        generation_config: {
+          thinking_config: { thinking_level: 'high', include_thoughts: true },
+          temperature: 0.3,
+        },
+      })
+
+      if (!res.ok) return null
+
+      const data = await res.json()
+      const parts: Array<{ text?: string; thought?: boolean }> =
+        data.candidates?.[0]?.content?.parts ?? []
+
+      for (const part of parts) {
+        if (part.thought === true || !part.text) continue
+        const parsed = tryParseJson(part.text)
+        if (parsed?.formula) return String(parsed.formula)
+      }
+    } catch {
+      /* revision is best-effort — swallow errors */
+    }
+    return null
+  }
+
   getLastSystemPrompt(): string { return this._lastSystemPrompt }
 
   getLastFormula(): string | null {
@@ -986,7 +1134,11 @@ export class LocalAssistant {
         const truncated = pdfText.length > MAX_CHARS
           ? pdfText.slice(0, MAX_CHARS) + '\n\n[... document truncated due to length ...]'
           : pdfText
-        llmMessage = `[PDF: "${active.name}" — ${this.getActivePdfPageCount()} pages]\n\n${truncated}\n\n[User question]\n${userMessage}`
+        const loggingInstruction =
+          '\n\n[Mandatory] Add a console.log for every line in both passes:\n' +
+          '- Pass 1: log the raw line and the type you assign it.\n' +
+          '- Pass 2: log the type, the cols array, and for every amount column log both the raw string and the parseMoney result.'
+        llmMessage = `[PDF: "${active.name}" — ${this.getActivePdfPageCount()} pages]\n\n${truncated}\n\n[User question]\n${userMessage}${loggingInstruction}`
       }
     }
 
@@ -1018,7 +1170,7 @@ export class LocalAssistant {
       ],
       generation_config: {
         thinking_config: { thinking_level: 'high', include_thoughts: true },
-        temperature: 0.7,
+        temperature: 0.5,
       },
     })
 
