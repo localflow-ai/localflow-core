@@ -1,8 +1,8 @@
 {
   "name": "localflow-core",
   "version": "0.1.0",
-  "description": "Local-first AI assistant — run LLM-generated analysis formulas in a sandboxed iframe, with datasets and proxied API access",
-  "license": "MIT",
+  "description": "Metadata-first AI framework — the LLM receives only schema and column names, generates deterministic code, executes locally on your data",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
