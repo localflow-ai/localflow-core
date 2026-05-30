@@ -23,7 +23,7 @@ Metadata-first AI makes the constraint explicit: **only metadata crosses the inf
 | Uses best available models | ✅ | Limited | ✅ |
 | Compatible with self-hosted LLMs | ✅ | ✅ | ✅ |
 | Results are deterministic | ❌ | ❌ | ✅ |
-| Re-runs without extra AI tokens | ❌ | ❌ | ✅ |
+| Re-runs without AI (no tokens/GPU) | ❌ | ❌ | ✅ |
 | Works on large datasets | ✅ | Limited | ✅ |
 
 ### The metadata boundary
