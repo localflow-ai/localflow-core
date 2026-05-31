@@ -1,7 +1,7 @@
 {
-  "name": "localflow-core",
+  "name": "@localflow-ai/core",
   "version": "0.1.0",
-  "description": "Metadata-first AI framework — the LLM receives only schema and column names, generates deterministic code, executes locally on your data",
+  "description": "Metadata-first AI framework \u2014 the LLM receives only schema and column names, generates deterministic code, executes locally on your data",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -12,7 +12,10 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch"
