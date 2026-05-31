@@ -4,3 +4,4 @@ package-lock.json
 *.local
 *.log
 .DS_Store
+proxy.js

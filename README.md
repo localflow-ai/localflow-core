@@ -105,98 +105,65 @@ That boundary is not fixed. The proxy can expose tools — including LLM-powered
 
 ## Quick start — embedding `LocalAssistant` in your app
 
+No server required — `LocalProxy` runs entirely in the browser and calls the LLM directly. See [localflow-examples](https://github.com/localflow-ai/localflow-examples) for complete React and vanilla JS apps you can run immediately.
+
 ### 1. Install
 
 ```bash
 npm install @localflow/core
 ```
 
-> **Development (monorepo):** `localflow-app` references this package via `file:../localflow-core` and a Vite alias pointing directly to the TypeScript source — no pre-built `dist/` is required during development.
-
-### 2. Set up the proxy
-
-The assistant requires a [LocalFlow proxy](https://github.com/localflow-ai/localflow-proxy) instance. The proxy is the mandatory network gateway for the metadata-first AI sandbox — all outbound calls from formula execution pass through it. It handles:
-
-- **Security and session management** — authenticates users against your business systems (CRM, ERP, or guest sessions), manages session tokens, and encrypts API keys so secrets are never exposed to the browser
-- **API governance** — defines which external APIs formulas may call; supports BYOK, per-source throttling, URL whitelisting, and OAuth 2.0 token exchange
-- **Server-side edge services** — PDF text extraction, OCR, and other tasks better suited to a server than a browser
-- **LLM bridge** — decrypts the user's API key at request time and forwards generation requests to the LLM
-- **Data flow monitoring** — tracks and audits what data enters and leaves the sandbox
-
-**Quick testing:** a hosted instance is available at `https://backoffice.daquota.io/v1` — no account needed. You can start with a guest (public) session, or authenticate against your own CRM if you want to test with real data. That said, you probably don't want to point your production CRM at an instance you don't control; use a sandbox or test environment instead.
-
-**Self-hosting:** for production use, run your own instance — see the [localflow-proxy](https://github.com/localflow-ai/localflow-proxy) repository for setup instructions.
-
-### 3. Authenticate with the proxy
+### 2. Create the assistant
 
 ```typescript
-import { ProxyClient } from '@localflow/core'
+import { LocalProxy, LocalAssistant } from '@localflow/core'
 
-const proxy = new ProxyClient('https://backoffice.daquota.io/v1')
-
-// Authenticate — stores the session token on the proxy instance
-await proxy.connect('odoo', { url, database, login, password })
-// or for a public/guest session:
-await proxy.connect('public', {})
-```
-
-### 4. Instantiate and configure
-
-```typescript
-import { LocalAssistant, type ApiPreference, type LLMConfig } from '@localflow/core'
-
-// Restore previously persisted preferences from storage
-let savedPrefs: ApiPreference[] = []
-try { savedPrefs = JSON.parse(localStorage.getItem('api-prefs') ?? '[]') } catch { /* ignore */ }
+// No server needed — LocalProxy calls the LLM directly from the browser
+const proxy = new LocalProxy()
 
 const assistant = new LocalAssistant({
-  proxy,                                           // authenticated proxy client
+  proxy,
   llm: {
     type: 'gemini',
-    apiKey: localStorage.getItem('llm-key') ?? '', // restored encrypted key — empty on first use
-    model: 'gemini-3-flash-preview',               // optional, this is the default
+    model: 'gemini-3-flash-preview',   // optional, this is the default
   },
-  darkMode: false,
-  apiPreferences: savedPrefs,
 
   // Point to the div where formula results should be rendered.
   // Accepts an HTMLElement, a CSS selector string, or a factory function.
   resultContainer: '#result',
 })
 
+// Pass the user's Gemini API key — stored locally, never sent to any third party
+await assistant.setLlmApiKey('AIza...')
+
 // Persist LLM config whenever it changes (user sets a new key, model, etc.)
-assistant.on('llm:change', (llm: LLMConfig) => {
+assistant.on('llm:change', (llm) => {
   if (llm.apiKey) localStorage.setItem('llm-key', llm.apiKey)
 })
+```
 
-// Persist API preferences whenever they change
-assistant.on('prefs:change', (prefs: ApiPreference[]) => {
-  localStorage.setItem('api-prefs', JSON.stringify(prefs))
+To restore a key across page loads, pass it at construction:
+
+```typescript
+const assistant = new LocalAssistant({
+  proxy,
+  llm: { type: 'gemini', apiKey: localStorage.getItem('llm-key') ?? '' },
+  resultContainer: '#result',
 })
 ```
 
-When the user enters their Gemini API key for the first time, pass it plain — the assistant encrypts it via the proxy internally:
+### 3. Load your data
 
 ```typescript
-await assistant.setLlmApiKey('AIza...')
-```
-
-### 5. Load your data
-
-```typescript
-// Tabular data — from any source: DB query, CSV parse, API response, etc.
+// Tabular data — from any source: CSV parse, DB query, API response, etc.
 assistant.addDataset('portfolio', portfolioRows)   // rows: Record<string, unknown>[]
 assistant.addDataset('market',    marketRows)
-
-// PDF documents — extract text via the proxy, then load
-const { text, pageCount } = await proxy.extractPdf(pdfBuffer)
-assistant.addPdfDataset('report.pdf', pdfBuffer, text, pageCount)
 
 // Mark which dataset is the "active" one (the `data` variable in formulas)
 assistant.setActiveDataset('portfolio')
 ```
 
-### 6. Send a message and render the result
+### 4. Send a message and render the result
 
 With `resultContainer` configured, the assistant takes care of everything — creating the iframe, setting sandbox permissions, and relaying proxied API calls. No boilerplate needed.
 
@@ -211,19 +178,9 @@ assistant.on('formula:done', ({ data }) => {
   console.log('Analysis result:', data)
 })
 
-// Track what leaves the browser — see the Events reference for data:local/proxy/llm
-assistant.on('data:llm', (payload) => {
-  // payload is LlmDataPayload — categorical data, no display strings
-  // { kind: 'table'|'pdf'|'text', query, dataset, columns?, pages? }
-  console.log('LLM event:', payload.kind, payload.dataset)
-})
-
 // Send a message — the LLM generates a formula, and the assistant
 // renders it automatically in the configured resultContainer.
 const response = await assistant.prompt('Show me the allocation by asset class')
-
-// You can also execute a formula directly (e.g. from a saved catalog):
-assistant.executeFormula(savedFormula)
 ```
 
 You can change the result container at any time:
@@ -234,21 +191,22 @@ assistant.resultContainer = document.getElementById('result')
 // or: assistant.resultContainer = () => document.querySelector('.panel.active')
 ```
 
-### 7. Wire up external APIs (optional)
+### 5. Save and replay formulas (optional)
+
+Generated formulas are deterministic — you can save them and re-run on any compatible dataset without an additional LLM call.
 
 ```typescript
-// Fetch the list of APIs the proxy admin has whitelisted
-const apis = await assistant.fetchApiConfigs()
+// Get the formula from the last response
+const formula = assistant.getLastFormula()
 
-// Activate one for use in formulas
-assistant.activateApi('overpass')
+// Save it to your catalog...
+saveToCatalog({ formula, title: response.title, description: response.description })
 
-// If an API requires a user-supplied key (BYOK):
-// pass the plain key — the assistant encrypts it via the proxy internally.
-await assistant.setApiUserKey('my-api', plainApiKey)
+// ...and replay it later
+assistant.executeFormula(savedFormula)
 ```
 
-### 8. Register a semantic analysis-match hook (optional)
+### 6. Register a semantic analysis-match hook (optional)
 
 This lets the assistant inject a relevant past analysis as a system-prompt example before calling the LLM, improving output quality.
 
@@ -261,80 +219,93 @@ assistant.setAnalysisMatchHook(async (query, ctx) => {
 
 ---
 
-## `ProxyClient` API reference
+## Use an actual proxy
+
+`LocalProxy` is designed for local development and quick prototyping. For production — where you need session management, API governance, PDF extraction, BYOK key encryption, rate limiting, and data flow monitoring — replace it with a [`ProxyClient`](https://github.com/localflow-ai/localflow-proxy) connected to a [LocalFlow proxy](https://github.com/localflow-ai/localflow-proxy) server.
+
+The proxy handles:
+
+- **Security and session management** — authenticates users against your business systems (CRM, ERP, or guest sessions), manages session tokens, and encrypts API keys so secrets are never exposed to the browser
+- **API governance** — defines which external APIs formulas may call; supports BYOK, per-source throttling, URL whitelisting, and OAuth 2.0 token exchange
+- **Server-side edge services** — PDF text extraction, OCR, and other tasks better suited to a server than a browser
+- **LLM bridge** — decrypts the user's API key at request time and forwards generation requests to the LLM
+- **Data flow monitoring** — tracks and audits what data enters and leaves the sandbox
+
+`LocalAssistant` accepts any implementation of the `Proxy` interface — switching from `LocalProxy` to `ProxyClient` requires no other changes.
+
+### Connect to the proxy
 
 ```typescript
-import { ProxyClient } from '@localflow/core'
+import { ProxyClient, LocalAssistant } from '@localflow/core'
 
-const proxy = new ProxyClient(baseUrl, token?)
-```
+const proxy = new ProxyClient('https://your-proxy.example.com')
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `baseUrl` | `string` | LocalFlow proxy base URL (e.g. `'https://backoffice.daquota.io/v1'`) |
-| `token` | `string \| null` | Optional — restore a previously saved session token |
-
-### Session
-
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `connect(type, config)` | `Promise<void>` | Authenticate and store the session token. `type` is `'odoo'`, `'salesforce'`, or `'public'`. `config` contains connector-specific credentials. |
-| `getSessionInfo()` | `Promise<unknown>` | Verify the current session. Throws if expired or not authenticated. |
-| `isConnected()` | `boolean` | `true` if a session token is stored. |
-| `proxy.token` | `string \| null` | The current session token — set by `connect()`, readable for persistence. |
-| `proxy.baseUrl` | `string` | The proxy base URL — mutable, can be changed before calling `connect()`. |
-
-```typescript
-const proxy = new ProxyClient('https://backoffice.daquota.io/v1')
-await proxy.connect('odoo', { url: 'https://myinstance.odoo.com', database: 'prod', login: 'admin', password: '...' })
+// Authenticate — stores the session token on the proxy instance
+await proxy.connect('odoo', { url, database, login, password })
+// or for a public/guest session:
+await proxy.connect('public', {})
 
 // Save the token so the session survives a page reload
 localStorage.setItem('proxy-token', proxy.token!)
 
 // Restore on next load
-const proxy = new ProxyClient('https://backoffice.daquota.io/v1', localStorage.getItem('proxy-token'))
+const proxy = new ProxyClient('https://your-proxy.example.com', localStorage.getItem('proxy-token'))
 await proxy.getSessionInfo()  // throws if expired — re-authenticate if needed
+
+const assistant = new LocalAssistant({ proxy, llm: { type: 'gemini' }, resultContainer: '#result' })
 ```
+
+**Quick testing:** a hosted instance is available at `https://backoffice.daquota.io/v1` — no account needed. You can start with a guest (public) session, or authenticate against your own CRM if you want to test with real data. That said, you probably don't want to point your production CRM at an instance you don't control; use a sandbox or test environment instead.
+
+**Self-hosting:** for production use, run your own instance — see the [localflow-proxy](https://github.com/localflow-ai/localflow-proxy) repository for setup instructions.
 
 ### PDF extraction
 
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `extractPdf(buffer, searchString?)` | `Promise<{ text, pageCount }>` | Extract text from a PDF via the proxy. Pass an optional `searchString` to receive only pages matching the query (plus one page of context either side). |
+PDF extraction requires a proxy (not available with `LocalProxy`).
 
 ```typescript
+// Extract text via the proxy, then load as a dataset
 const { text, pageCount } = await proxy.extractPdf(pdfBuffer)
+assistant.addPdfDataset('report.pdf', pdfBuffer, text, pageCount)
+
+assistant.setActiveDataset('report.pdf')
+const response = await assistant.prompt('Summarise the key figures')
 ```
 
-### Encryption
-
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `isEncrypted(str)` | `boolean` | `true` if the string is in the proxy-encrypted format. |
-| `encryptMessage(plainText)` | `Promise<string>` | Encrypt a string via the proxy. The result is safe to store and pass to the assistant. |
-| `decryptMessage(cipherText)` | `Promise<string>` | Decrypt a proxy-encrypted string. |
-
-> You rarely need to call these directly — `assistant.setLlmApiKey()` and `assistant.setApiUserKey()` handle encryption internally.
-
-### CRM
-
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `listObjectTypes()` | `Promise<CrmObjectType[]>` | List all available CRM object types (without fields). |
-| `getObjectMetadata(objectType)` | `Promise<CrmObjectType>` | Fetch full metadata for one object type, including its fields. |
-| `getData(objectType, fields)` | `Promise<Record<string, unknown>[]>` | Fetch rows for a CRM object type. |
+Pass an optional `searchString` to receive only pages matching the query (plus one page of context either side):
 
 ```typescript
-const types = await proxy.listObjectTypes()
-const meta  = await proxy.getObjectMetadata('res.partner')
-const rows  = await proxy.getData('res.partner', ['name', 'email', 'country_id'])
+const { text, pageCount } = await proxy.extractPdf(pdfBuffer, 'revenue')
+```
+
+### Wire up external APIs (optional)
+
+The proxy admin configures which external APIs analysis formulas may call. Users can opt in/out and supply their own API keys (BYOK) per API.
+
+```typescript
+// Fetch the list of APIs the proxy admin has whitelisted
+const apis = await assistant.fetchApiConfigs()
+
+// Activate one for use in formulas
+assistant.activateApi('overpass')
+
+// If an API requires a user-supplied key (BYOK):
+// pass the plain key — the assistant encrypts it via the proxy internally.
+await assistant.setApiUserKey('my-api', plainApiKey)
+
+// Persist API preferences whenever they change
+assistant.on('prefs:change', (prefs) => {
+  localStorage.setItem('api-prefs', JSON.stringify(prefs))
+})
 ```
 
 ---
 
-## `LocalAssistant` API reference
+## API Reference
 
-### Constructor
+### `LocalAssistant` API reference
+
+#### Constructor
 
 ```typescript
 new LocalAssistant(config: LocalAssistantConfig)
@@ -342,7 +313,7 @@ new LocalAssistant(config: LocalAssistantConfig)
 
 ```typescript
 interface LocalAssistantConfig {
-  proxy: ProxyClient       // authenticated proxy client (call proxy.connect() first)
+  proxy: Proxy             // any Proxy implementation — LocalProxy or ProxyClient
   llm: LLMConfig           // LLM backend configuration
   darkMode?: boolean       // passed to the formula sandbox (default: false)
   apiPreferences?: ApiPreference[]    // previously persisted prefs (from 'prefs:change')
@@ -369,7 +340,7 @@ const DEFAULT_SANDBOX = [
 
 ---
 
-### Configuration
+#### Configuration
 
 | Property / Method | Type / Returns | Description |
 |-------------------|----------------|-------------|
@@ -377,19 +348,19 @@ const DEFAULT_SANDBOX = [
 | `assistant.darkMode` | `boolean` | Toggle dark mode in the analysis sandbox. |
 | `assistant.resultContainer` | `ResultContainer` | Where formula results are rendered. |
 | `assistant.sandboxPermissions` | `string[]` | iframe sandbox flags. |
-| `assistant.proxy` _(read-only)_ | `ProxyClient` | The proxy client passed at construction. |
+| `assistant.proxy` _(read-only)_ | `Proxy` | The proxy implementation passed at construction. |
 | `setLlmApiKey(plainKey)` | `Promise<void>` | Encrypt a plain API key via the proxy and store it. Emits `'llm:change'`. |
 
 ---
 
-### Datasets
+#### Datasets
 
 Datasets are ordered key-value pairs: name → array of row objects (tabular) or PDF document (with extracted text). The **active dataset** is exposed as the `data` variable inside formula code; all datasets are accessible via `datasets['name']`.
 
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `addDataset(name, rows)` | `void` | Add or replace a tabular dataset. First added becomes active. |
-| `addPdfDataset(name, buffer, extractedText, pageCount)` | `void` | Add a PDF document. Pass the text returned by `ProxyClient.extractPdf()`. |
+| `addPdfDataset(name, buffer, extractedText, pageCount)` | `void` | Add a PDF document. Pass the text returned by `proxy.extractPdf()`. |
 | `removeDataset(name)` | `void` | Remove a dataset. Active dataset moves to next available. |
 | `updateDataset(name, rows)` | `void` | Replace rows for an existing dataset. |
 | `getDataset(name)` | `rows \| undefined` | Read rows for a named dataset. |
@@ -412,7 +383,7 @@ const active = assistant.getActiveDataset()
 
 ---
 
-### External APIs
+#### External APIs
 
 The proxy admin configures which external APIs analysis formulas may call. Users can opt in/out and supply their own API keys (BYOK) per API.
 
@@ -430,7 +401,7 @@ The proxy admin configures which external APIs analysis formulas may call. Users
 
 ---
 
-### Conversation
+#### Conversation
 
 | Method | Returns | Description |
 |--------|---------|-------------|
@@ -442,7 +413,7 @@ The proxy admin configures which external APIs analysis formulas may call. Users
 | `getLastFormula()` | `string \| null` | Formula code from the most recent model response. |
 | `buildCurrentSystemPrompt(example?)` | `string` | Build the system prompt for the current state without sending it. |
 
-#### `prompt()` options
+##### `prompt()` options
 
 ```typescript
 await assistant.prompt('Break down revenue by region', {
@@ -454,7 +425,7 @@ await assistant.prompt('Break down revenue by region', {
 })
 ```
 
-#### `AssistantResponse` shape
+##### `AssistantResponse` shape
 
 ```typescript
 interface AssistantResponse {
@@ -472,7 +443,7 @@ interface AssistantResponse {
 
 ---
 
-#### `executeFormula(formula)`
+##### `executeFormula(formula)`
 
 Renders a formula in the configured `resultContainer`. Creates the sandboxed iframe, applies `sandboxPermissions`, wires up the proxy fetch relay, and emits `formula:done` / `formula:error`. Called automatically by `prompt()` when `resultContainer` is set.
 
@@ -481,7 +452,7 @@ Renders a formula in the configured `resultContainer`. Creates the sandboxed ifr
 assistant.executeFormula(savedAnalysis.formula)
 ```
 
-#### `destroy()`
+##### `destroy()`
 
 Removes the managed iframe and cleans up all event listeners. Call when the assistant is no longer needed.
 
@@ -491,7 +462,7 @@ assistant.destroy()
 
 ---
 
-### Analysis match hook
+#### Analysis match hook
 
 Register a function that the assistant calls before each LLM request to find a semantically similar past analysis. The result is injected into the system prompt as an example, improving output quality for recurring analysis patterns.
 
@@ -509,7 +480,7 @@ const match = await assistant.resolveAnalysisMatch('Show portfolio heatmap')
 
 ---
 
-### Events
+#### Events
 
 ```typescript
 assistant.on('message', (response: AssistantResponse) => {
@@ -553,6 +524,114 @@ assistant.off('message', myListener)
 
 ---
 
+### `Proxy` API reference
+
+`Proxy` is the interface that both `LocalProxy` and `ProxyClient` implement. `LocalAssistant` depends only on this interface — you can supply any conforming implementation.
+
+```typescript
+import type { Proxy } from '@localflow/core'
+
+interface Proxy {
+  readonly token: string | null
+
+  isConnected(): boolean
+  connect(type?: string, config?: Record<string, unknown>): Promise<void>
+  getSessionInfo(): Promise<unknown>
+
+  isEncrypted(str: string): boolean
+  encryptMessage(message: string): Promise<string>
+  decryptMessage(message: string): Promise<string>
+
+  callGenai(payload: GenaiPayload): Promise<Response>
+
+  getApiConfigs(): Promise<ApiConfig[]>
+  proxyApiCall(url: string, method: string, headers: Record<string, string>, body: string): Promise<Response>
+
+  extractPdf(buffer: ArrayBuffer, searchString?: string): Promise<{ text: string; pageCount: number }>
+
+  listObjectTypes(): Promise<CrmObjectType[]>
+  getObjectMetadata(objectType: string): Promise<CrmObjectType>
+  getData(objectType: string, fields: string[]): Promise<Record<string, unknown>[]>
+}
+```
+
+#### `LocalProxy`
+
+Browser-only implementation. No server required — suitable for local development and prototyping.
+
+```typescript
+import { LocalProxy } from '@localflow/core'
+
+new LocalProxy(config?: { apis?: ApiConfig[], geminiBaseUrl?: string })
+```
+
+| Behaviour | Notes |
+|-----------|-------|
+| `callGenai` | Calls the Gemini API directly from the browser using the plain API key |
+| `encryptMessage` / `decryptMessage` | No-ops — the key is stored and used as plain text |
+| `extractPdf` | Throws — PDF extraction is not available in standalone mode |
+| `listObjectTypes` / `getObjectMetadata` / `getData` | Return empty results — no CRM access |
+| `connect` / `getSessionInfo` | No-ops — no session management |
+
+> Not for production use. `LocalProxy` emits a console warning to remind you.
+
+#### `ProxyClient`
+
+HTTP client for a [LocalFlow proxy](https://github.com/localflow-ai/localflow-proxy) server. Implements the full `Proxy` interface and adds session management.
+
+```typescript
+import { ProxyClient } from '@localflow/core'
+
+const proxy = new ProxyClient(baseUrl, token?)
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `baseUrl` | `string` | LocalFlow proxy base URL (e.g. `'https://backoffice.daquota.io/v1'`) |
+| `token` | `string \| null` | Optional — restore a previously saved session token |
+
+##### Session
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `connect(type, config)` | `Promise<void>` | Authenticate and store the session token. `type` is `'odoo'`, `'salesforce'`, or `'public'`. `config` contains connector-specific credentials. |
+| `getSessionInfo()` | `Promise<unknown>` | Verify the current session. Throws if expired or not authenticated. |
+| `isConnected()` | `boolean` | `true` if a session token is stored. |
+| `proxy.token` | `string \| null` | The current session token — set by `connect()`, readable for persistence. |
+| `proxy.baseUrl` | `string` | The proxy base URL — mutable, can be changed before calling `connect()`. |
+
+##### Encryption
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `isEncrypted(str)` | `boolean` | `true` if the string is in the proxy-encrypted format. |
+| `encryptMessage(plainText)` | `Promise<string>` | Encrypt a string via the proxy. The result is safe to store and pass to the assistant. |
+| `decryptMessage(cipherText)` | `Promise<string>` | Decrypt a proxy-encrypted string. |
+
+> You rarely need to call these directly — `assistant.setLlmApiKey()` and `assistant.setApiUserKey()` handle encryption internally.
+
+##### PDF extraction
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `extractPdf(buffer, searchString?)` | `Promise<{ text, pageCount }>` | Extract text from a PDF via the proxy. Pass an optional `searchString` to receive only pages matching the query (plus one page of context either side). |
+
+##### CRM
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `listObjectTypes()` | `Promise<CrmObjectType[]>` | List all available CRM object types (without fields). |
+| `getObjectMetadata(objectType)` | `Promise<CrmObjectType>` | Fetch full metadata for one object type, including its fields. |
+| `getData(objectType, fields)` | `Promise<Record<string, unknown>[]>` | Fetch rows for a CRM object type. |
+
+```typescript
+const types = await proxy.listObjectTypes()
+const meta  = await proxy.getObjectMetadata('res.partner')
+const rows  = await proxy.getData('res.partner', ['name', 'email', 'country_id'])
+```
+
+---
+
 ## Building
 
 ```bash
@@ -573,7 +652,9 @@ localflow-core/
 └── src/
     ├── index.ts          # public exports
     ├── LocalAssistant.ts # the core class
-    ├── ProxyClient.ts    # proxy client
+    ├── Proxy.ts          # Proxy interface contract
+    ├── LocalProxy.ts     # browser-only Proxy implementation
+    ├── ProxyClient.ts    # HTTP proxy client
     └── types.ts          # all public TypeScript interfaces
 ```
 
@@ -581,13 +662,13 @@ localflow-core/
 
 ## Roadmap highlights
 
-- [ ] Publish to npm as `@localflow/core`
 - [ ] Pluggable LLM backends (OpenAI, Anthropic, Mistral, Ollama)
 - [ ] Interactive formula results (action buttons returned by formulas)
 - [ ] Async / streaming formula execution
 
 ### Recently shipped
 
+- [x] **Published to npm** — available as `@localflow/core`
 - [x] **PDF document support** — PDFs as first-class datasets; text extracted via the proxy, full document text injected into LLM context
 - [x] **Data flow awareness** — `data:local` / `data:proxy` / `data:llm` events; animated status chip in the header; session history popover; sandbox safety indicator
 - [x] **Configurable proxy URL** — proxy URL configurable at runtime; persisted in localStorage
