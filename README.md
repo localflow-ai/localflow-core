@@ -557,17 +557,47 @@ interface Proxy {
 
 #### `LocalProxy`
 
-Browser-only implementation. No server required — suitable for local development and prototyping.
+Browser-only implementation. No server required — suitable for local development, testing, and demos.
 
 ```typescript
 import { LocalProxy } from '@localflow/core'
 
-new LocalProxy(config?: { apis?: ApiConfig[], geminiBaseUrl?: string })
+new LocalProxy(config?: {
+  apis?: ApiConfig[]
+  geminiBaseUrl?: string
+  geminiApiKey?: string          // baked-in key used when no key is set on the assistant
+  rateLimit?: {
+    maxPerDay: number            // per-browser daily cap (tracked in localStorage)
+    storageKey?: string          // localStorage key prefix — defaults to '_lf_rl'
+  }
+})
+```
+
+**`geminiApiKey`** — a fallback key used when the assistant has no key set. Useful for demos where you want users to try the app without supplying their own key. The user's own key (set via `assistant.setLlmApiKey()`) always takes precedence.
+
+**`rateLimit`** — per-browser daily cap enforced before each `callGenai` call. When the limit is reached, `callGenai` throws `LocalProxyRateLimitError`. Pair with `geminiApiKey` to prevent a single user from exhausting a shared demo key for everyone.
+
+```typescript
+import { LocalProxy, LocalProxyRateLimitError, LocalAssistant } from '@localflow/core'
+
+const proxy = new LocalProxy({
+  geminiApiKey: 'AIza...',       // shared demo key — visible in DevTools, use a limited one
+  rateLimit: { maxPerDay: 20 },  // generous enough to evaluate, stingy enough to protect the key
+})
+const assistant = new LocalAssistant({ proxy, llm: { type: 'gemini' } })
+
+try {
+  await assistant.prompt('Show me the top 10 by revenue')
+} catch (err) {
+  if (err instanceof LocalProxyRateLimitError) {
+    // show UI asking the user to enter their own key
+  }
+}
 ```
 
 | Behaviour | Notes |
 |-----------|-------|
-| `callGenai` | Calls the Gemini API directly from the browser using the plain API key |
+| `callGenai` | Checks rate limit, then calls Gemini directly from the browser. Uses `geminiApiKey` if no key is set on the assistant. |
 | `encryptMessage` / `decryptMessage` | No-ops — the key is stored and used as plain text |
 | `extractPdf` | Throws — PDF extraction is not available in standalone mode |
 | `listObjectTypes` / `getObjectMetadata` / `getData` | Return empty results — no CRM access |
