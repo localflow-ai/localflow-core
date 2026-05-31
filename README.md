@@ -108,7 +108,7 @@ That boundary is not fixed. The proxy can expose tools — including LLM-powered
 ### 1. Install
 
 ```bash
-npm install @localflow-ai/core
+npm install @localflow/core
 ```
 
 > **Development (monorepo):** `localflow-app` references this package via `file:../localflow-core` and a Vite alias pointing directly to the TypeScript source — no pre-built `dist/` is required during development.
@@ -130,7 +130,7 @@ The assistant requires a [LocalFlow proxy](https://github.com/localflow-ai/local
 ### 3. Authenticate with the proxy
 
 ```typescript
-import { ProxyClient } from '@localflow-ai/core'
+import { ProxyClient } from '@localflow/core'
 
 const proxy = new ProxyClient('https://backoffice.daquota.io/v1')
 
@@ -143,7 +143,7 @@ await proxy.connect('public', {})
 ### 4. Instantiate and configure
 
 ```typescript
-import { LocalAssistant, type ApiPreference, type LLMConfig } from '@localflow-ai/core'
+import { LocalAssistant, type ApiPreference, type LLMConfig } from '@localflow/core'
 
 // Restore previously persisted preferences from storage
 let savedPrefs: ApiPreference[] = []
@@ -264,7 +264,7 @@ assistant.setAnalysisMatchHook(async (query, ctx) => {
 ## `ProxyClient` API reference
 
 ```typescript
-import { ProxyClient } from '@localflow-ai/core'
+import { ProxyClient } from '@localflow/core'
 
 const proxy = new ProxyClient(baseUrl, token?)
 ```
@@ -548,8 +548,8 @@ assistant.off('message', myListener)
 | `api:error` | `{ url, hostname, apiConfig, reason }` | An active API returned a JSON error body (e.g. expired key, quota exceeded). `reason` is extracted from the response. |
 | `data:local` | `{ data: string, action: string }` | An action completed entirely in the browser. E.g. file loaded from disk, formula executed in sandbox. Emitted by the app layer. |
 | `data:proxy` | `{ data: string, action: string }` | Data was sent to the proxy server but not to the LLM. E.g. PDF extraction. Emitted by the app layer. |
-| `data:llm` | `LlmDataPayload` | Data was forwarded to the LLM. Categorical payload — no display strings. `kind` is `'table'`, `'pdf'`, or `'text'`; always includes `query` (raw user message) and `dataset` (file/dataset name). Table events include `columns: number`; PDF events include `pages: number`. Import the type: `import type { LlmDataPayload } from '@localflow-ai/core'`. |
-| `data:api-proxy` | `ApiProxyPayload` | A formula fetch was routed through the api-proxy — fired on every call (success and failure). Includes `url`, `method`, `body` (raw request body — what left the browser), `apiConfig` (matched API definition or `null` if unrecognised), and `status` (HTTP response status; `undefined` on network error). Import the type: `import type { ApiProxyPayload } from '@localflow-ai/core'`. |
+| `data:llm` | `LlmDataPayload` | Data was forwarded to the LLM. Categorical payload — no display strings. `kind` is `'table'`, `'pdf'`, or `'text'`; always includes `query` (raw user message) and `dataset` (file/dataset name). Table events include `columns: number`; PDF events include `pages: number`. Import the type: `import type { LlmDataPayload } from '@localflow/core'`. |
+| `data:api-proxy` | `ApiProxyPayload` | A formula fetch was routed through the api-proxy — fired on every call (success and failure). Includes `url`, `method`, `body` (raw request body — what left the browser), `apiConfig` (matched API definition or `null` if unrecognised), and `status` (HTTP response status; `undefined` on network error). Import the type: `import type { ApiProxyPayload } from '@localflow/core'`. |
 
 ---
 
@@ -568,7 +568,7 @@ The standalone `tsc` build produces `dist/` with `.js` and `.d.ts` files and is 
 
 ```
 localflow-core/
-├── package.json          # name: "@localflow-ai/core"
+├── package.json          # name: "@localflow/core"
 ├── tsconfig.json         # emits dist/ with .js + .d.ts
 └── src/
     ├── index.ts          # public exports
@@ -581,7 +581,7 @@ localflow-core/
 
 ## Roadmap highlights
 
-- [ ] Publish to npm as `@localflow-ai/core`
+- [ ] Publish to npm as `@localflow/core`
 - [ ] Pluggable LLM backends (OpenAI, Anthropic, Mistral, Ollama)
 - [ ] Interactive formula results (action buttons returned by formulas)
 - [ ] Async / streaming formula execution
