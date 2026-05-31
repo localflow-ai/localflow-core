@@ -487,11 +487,13 @@ function esc(s: string): string { return s.replace(/<\//g, '<\\/') }
 function buildSandboxDarkCss(vars?: Record<string, string>): string {
   const bg  = vars?.['--background'] ?? 'oklch(0.17 0 0)'
   const fg  = vars?.['--foreground'] ?? 'oklch(0.96 0 0)'
-  // Safety net: force common text-bearing elements to inherit the light body color
-  // in dark mode. Specificity (0,1,2) beats plain Tailwind utilities (0,1,0) but
-  // loses to dark: variants (0,2,1), so intentional dark-mode colors still apply.
+  // Safety net: force text and hover backgrounds in dark mode using plain CSS so
+  // they work regardless of whether Tailwind's dark: variants initialise in time.
+  // Specificity (0,1,2) beats Tailwind base utilities (0,1,1) but loses to
+  // explicit dark: variants (0,2,1), so intentional per-cell colours still apply.
   return `html.dark body { background-color: ${bg}; color: ${fg}; }
-html.dark td, html.dark th, html.dark p, html.dark li, html.dark span, html.dark label { color: inherit; }`
+html.dark td, html.dark th, html.dark p, html.dark li, html.dark span, html.dark label { color: inherit; }
+html.dark tr:hover > td, html.dark tr:hover > th { background-color: oklch(0.32 0 0) !important; color: inherit !important; }`
 }
 
 // Must be set as a global BEFORE the Tailwind CDN script loads so the CDN
