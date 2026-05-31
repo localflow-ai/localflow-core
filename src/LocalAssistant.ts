@@ -494,8 +494,11 @@ function buildSandboxDarkCss(vars?: Record<string, string>): string {
 html.dark td, html.dark th, html.dark p, html.dark li, html.dark span, html.dark label { color: inherit; }`
 }
 
+// Must be set as a global BEFORE the Tailwind CDN script loads so the CDN
+// picks up darkMode:'class' on initialisation. Using tailwind.config = {...}
+// after the CDN runs is too late — the CDN defaults to 'media' strategy.
 const TAILWIND_CONFIG = `
-tailwind.config = {
+tailwind = { config: {
   darkMode: 'class',
   theme: {
     extend: {
@@ -516,7 +519,7 @@ tailwind.config = {
       }
     }
   }
-}`
+}}`
 
 function buildSandboxDocumentFn(
   rows: Record<string, unknown>[],
@@ -537,8 +540,8 @@ function buildSandboxDocumentFn(
 <html${darkClass}>
 <head>
 <meta charset="utf-8">
-<script src="https://cdn.tailwindcss.com"></script>
 <script>${TAILWIND_CONFIG}</script>
+<script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
