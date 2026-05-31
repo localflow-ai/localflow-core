@@ -1,6 +1,6 @@
 {
   "name": "@localflow/core",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Metadata-first AI framework — the LLM receives only schema and column names, generates deterministic code, executes locally on your data",
   "license": "Apache-2.0",
   "type": "module",
