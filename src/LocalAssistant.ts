@@ -593,7 +593,9 @@ window.addEventListener('message', function(e) {
   }
 });
 function parseMoney(s) {
-  if (!s) return NaN;
+  if (s === null || s === undefined || s === '') return NaN;
+  if (typeof s === 'number') return isFinite(s) ? s : NaN;
+  s = String(s);
   var sign = /^\s*-/.test(s) ? -1 : 1;
   var clean = s.trim().replace(/^[+-]\s*/, '').replace(/[€$£₹¥F*†‡°]+/g, '').trim();
   if (/\d{7,}/.test(clean.replace(/[\s.,]/g, ''))) return NaN;
@@ -603,7 +605,8 @@ function parseMoney(s) {
   return isNaN(v) ? NaN : sign * v;
 }
 function parseNum(s) {
-  if (!s) return NaN;
+  if (s === null || s === undefined || s === '') return NaN;
+  if (typeof s === 'number') return isFinite(s) ? s : NaN;
   return parseFloat(String(s).replace(/'/g, '').replace(/,/g, '.').replace(/%/g, '').trim());
 }
 function splitCols(s) {
