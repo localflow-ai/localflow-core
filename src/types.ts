@@ -46,17 +46,35 @@ export interface LocalAssistantConfig {
    */
   sandboxPermissions?: string[]
   /**
-   * CSS custom properties applied to the analysis sandbox iframe when dark mode is active.
-   * Pass your app's dark-mode variable map so the sandbox palette matches your UI.
-   * At minimum, '--background' and '--foreground' are used for the sandbox body.
-   */
-  sandboxDarkVars?: Record<string, string>
-  /**
    * When true, the first formula generated for a new PDF is silently executed,
    * its logs are collected, and a second LLM call revises the formula before
    * anything is shown to the user. Disabled by default.
    */
   pdfFormulaRevision?: boolean
+  /**
+   * Maximum number of silent LLM retries when a generated formula has a JavaScript
+   * syntax error. The error is sent back to the LLM transparently — the user sees
+   * no indication that a retry happened. Set to 0 to disable. Defaults to 1.
+   */
+  formulaHealingRetries?: number
+  /**
+   * Tailwind theme object injected into the sandbox Tailwind CDN config.
+   * Accepts a standard Tailwind `theme` object (the value of `theme:` in `tailwind.config.js`).
+   * Use it to align the sandbox palette with your host app's design tokens — e.g. override
+   * `gray` shades or define a `primary` color that generated formulas can reference via
+   * `bg-primary`, `text-primary`, `border-primary`, etc.
+   *
+   * @example
+   * sandboxTheme: {
+   *   extend: {
+   *     colors: {
+   *       primary: '#14b8a6',
+   *       gray: { 700: '#1e2a29', 800: '#162120', 900: '#0d1a19' },
+   *     },
+   *   },
+   * }
+   */
+  sandboxTheme?: Record<string, unknown>
 }
 
 // ---------------------------------------------------------------------------

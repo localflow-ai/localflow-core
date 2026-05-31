@@ -124,9 +124,10 @@ export class LocalProxy implements Proxy {
   }
 
   async callGenai(payload: GenaiPayload): Promise<Response> {
-    this._checkRateLimit()
     const { encryptedApiKey, model, system_instruction, contents, generation_config } = payload
-    const apiKey = (encryptedApiKey?.trim()) ? encryptedApiKey : this._geminiApiKey
+    const usingDemoKey = !encryptedApiKey?.trim()
+    if (usingDemoKey) this._checkRateLimit()
+    const apiKey = usingDemoKey ? this._geminiApiKey : encryptedApiKey
     if (!apiKey) throw new Error('[LocalProxy] No Gemini API key configured. Call assistant.setLlmApiKey() or pass geminiApiKey in the LocalProxy constructor.')
     const url = `${this._geminiBase}/v1beta/models/${model}:generateContent?key=${apiKey}`
     const response = await fetch(url, {
@@ -134,7 +135,7 @@ export class LocalProxy implements Proxy {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ system_instruction, contents, generation_config }),
     })
-    this._incrementRateLimit()
+    if (usingDemoKey) this._incrementRateLimit()
     return response
   }
 

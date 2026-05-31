@@ -319,6 +319,9 @@ interface LocalAssistantConfig {
   apiPreferences?: ApiPreference[]    // previously persisted prefs (from 'prefs:change')
   resultContainer?: ResultContainer   // where to render formula results
   sandboxPermissions?: string[]       // iframe sandbox flags (see defaults below)
+  sandboxTheme?: Record<string, unknown>    // Tailwind theme object injected into the sandbox (see below)
+  pdfFormulaRevision?: boolean        // silent self-correction on first PDF query (default: false)
+  formulaHealingRetries?: number      // silent retries on JS syntax errors (default: 1)
 }
 
 interface LLMConfig {
@@ -348,6 +351,8 @@ const DEFAULT_SANDBOX = [
 | `assistant.darkMode` | `boolean` | Toggle dark mode in the analysis sandbox. |
 | `assistant.resultContainer` | `ResultContainer` | Where formula results are rendered. |
 | `assistant.sandboxPermissions` | `string[]` | iframe sandbox flags. |
+| `assistant.pdfFormulaRevision` | `boolean` | When `true`, the first formula for a new PDF is silently run, its logs collected, and a second LLM call revises it before anything is shown to the user. |
+| `sandboxTheme` _(constructor only)_ | `Record<string, unknown>` | Tailwind `theme` object injected into the sandbox CDN config before it initialises. Use it to align generated UI with your host app's palette: override `gray` shades for dark-mode card surfaces, define a `primary` color referenceable via `bg-primary` / `text-primary`, etc. The sandbox body also picks up `dark:bg-gray-900 dark:text-gray-100` automatically, so setting `gray[900]` and `gray[100]` covers the full background. Works with any host framework — just translate your design tokens to Tailwind color values. |
 | `assistant.proxy` _(read-only)_ | `Proxy` | The proxy implementation passed at construction. |
 | `setLlmApiKey(plainKey)` | `Promise<void>` | Encrypt a plain API key via the proxy and store it. Emits `'llm:change'`. |
 
@@ -703,6 +708,7 @@ localflow-core/
 - [x] **Data flow awareness** — `data:local` / `data:proxy` / `data:llm` events; animated status chip in the header; session history popover; sandbox safety indicator
 - [x] **Configurable proxy URL** — proxy URL configurable at runtime; persisted in localStorage
 - [x] **CRM connectors** — Odoo and Salesforce authentication and data loading via `ProxyClient`
+- [x] **Formula self-healing** — `formulaHealingRetries` config option; syntax errors are caught and silently retried before returning to the caller (default: 1)
 
 ---
 

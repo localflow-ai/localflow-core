@@ -5,16 +5,6 @@ import type {
   AnalysisMatchHook, AnalysisMatchContext, AnalysisMatchResult,
 } from './types'
 import type { Proxy } from './Proxy'
-// Gray scale used only inside the analysis sandbox (Tailwind config injection).
-// Not exported — these neutrals match the default dark palette; apps can override
-// the body background/foreground via LocalAssistantConfig.sandboxDarkVars or let
-// the assistant read them automatically from the host DOM.
-const _sandboxGray = {
-  950: 'oklch(0.12 0 0)', 900: 'oklch(0.20 0 0)', 800: 'oklch(0.28 0 0)',
-  700: 'oklch(0.35 0 0)', 600: 'oklch(0.42 0 0)', 500: 'oklch(0.52 0 0)',
-  400: 'oklch(0.63 0 0)', 300: 'oklch(0.73 0 0)', 200: 'oklch(0.83 0 0)',
-  100: 'oklch(0.91 0 0)', 50:  'oklch(0.96 0 0)',
-} as const
 
 const DEFAULT_SANDBOX_PERMISSIONS = [
   'allow-scripts',
@@ -156,7 +146,8 @@ Do NOT use \`window\`, \`import\`, or \`require\`. Do NOT call APIs not listed i
     - In \`requestAnimationFrame\`, initialise: \`const map = L.map(mapId).setView([lat,lng], zoom)\` then add \`L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'© OpenStreetMap contributors'}).addTo(map)\`
     - In \`reset()\`, always call \`map.remove()\`
     - Use \`L.marker([lat,lng]).addTo(map).bindPopup(label)\` for points; \`L.circle\`, \`L.polygon\`, etc. for shapes.
-    - **CRITICAL — coordinates:** CSV fields are always strings. You MUST call \`parseFloat()\` on every lat/lng value before passing it to Leaflet. Always filter rows first: \`const valid = data.filter(r => { const lat = parseFloat(r[latCol]); const lng = parseFloat(r[lngCol]); return !isNaN(lat) && !isNaN(lng); });\` then use \`parseFloat()\` again when creating markers: \`L.marker([parseFloat(r[latCol]), parseFloat(r[lngCol])])\`. Never pass raw field values directly — even if they look numeric, they are strings and Leaflet will throw \`Invalid LatLng\`.`
+    - **CRITICAL — coordinates:** CSV fields are always strings. You MUST call \`parseFloat()\` on every lat/lng value before passing it to Leaflet. Always filter rows first: \`const valid = data.filter(r => { const lat = parseFloat(r[latCol]); const lng = parseFloat(r[lngCol]); return !isNaN(lat) && !isNaN(lng); });\` then use \`parseFloat()\` again when creating markers: \`L.marker([parseFloat(r[latCol]), parseFloat(r[lngCol])])\`. Never pass raw field values directly — even if they look numeric, they are strings and Leaflet will throw \`Invalid LatLng\`.
+14. **Theme-aware styling:** Never hardcode hex, rgb, or hsl values for surfaces, text, or accent colors. Always use Tailwind utility classes — the sandbox palette may be customised by the host app and hardcoded colors will not respect the theme. For accent elements (badges, highlights, links), prefer \`text-primary\`, \`bg-primary\`, \`border-primary\`. For surfaces, use \`bg-white dark:bg-gray-800\`. For body text, use \`text-gray-900 dark:text-gray-100\`. Exception: if the user explicitly requests a specific color for a specific element, you may use a Tailwind color class for that element only.`
 
   const otherDatasets = Object.entries(datasets).filter(([, r]) => r !== rows)
   const datasetsSection = Object.keys(datasets).length > 0
@@ -231,8 +222,8 @@ try {
   const col = 'Status'; const chartId = 'chart-' + Date.now(); const isDark = document.documentElement.classList.contains('dark');
   const counts = {}; for (const row of data) { const val = String(row[col] ?? '(empty)'); counts[val] = (counts[val] ?? 0) + 1; }
   const labels = Object.keys(counts).sort((a, b) => counts[b] - counts[a]); const values = labels.map(l => counts[l]);
-  const html = \`<div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3"><p class="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">Distribution of \${col}</p><div id="\${chartId}" style="height:260px"></div></div>\`;
-  requestAnimationFrame(() => { const el = document.getElementById(chartId); if (!el) return; const chart = echarts.init(el, isDark ? 'dark' : null); chart.setOption({ backgroundColor: 'transparent', tooltip: { trigger: 'axis' }, grid: { left: 16, right: 16, top: 16, bottom: 40, containLabel: true }, xAxis: { type: 'category', data: labels, axisLabel: { rotate: 30, fontSize: 11 } }, yAxis: { type: 'value' }, series: [{ type: 'bar', data: values, barMaxWidth: 48, itemStyle: { borderRadius: [4, 4, 0, 0], color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#6366f1' }, { offset: 1, color: '#818cf8' }]) } }] }); });
+  const html = \`<div class="p-3 rounded-lg bg-white dark:bg-gray-800"><p class="text-sm font-semibold mb-2">Distribution of \${col}</p><div id="\${chartId}" style="height:260px"></div></div>\`;
+  requestAnimationFrame(() => { const el = document.getElementById(chartId); if (!el) return; const chart = echarts.init(el, isDark ? 'dark' : null); chart.setOption({ backgroundColor: 'transparent', tooltip: { trigger: 'axis' }, grid: { left: 16, right: 16, top: 16, bottom: 40, containLabel: true }, xAxis: { type: 'category', data: labels, axisLabel: { rotate: 30, fontSize: 11 } }, yAxis: { type: 'value' }, series: [{ type: 'bar', data: values, barMaxWidth: 48, itemStyle: { borderRadius: [4, 4, 0, 0] } }] }); });
   return { html, data: counts, reset: () => { echarts.getInstanceByDom(document.getElementById(chartId))?.dispose(); } };
 } catch (error) { console.error(error); return { html: \`<div class="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 p-3 rounded-lg text-sm">\${error.message}</div>\`, data: {}, reset: () => {} }; }
 \`\`\``
@@ -346,45 +337,40 @@ try {
   if (!rows.length) throw new Error('No rows found — check section keywords and NOISE set');
 
   const html = \`
-    <div class="space-y-3 font-sans">
-      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div class="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50 flex justify-between items-center">
-          <h3 class="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-tight">Extracted Table</h3>
-          \${grandTotal ? \`<div class="text-right">
-            <span class="text-[10px] text-gray-400 uppercase block">Total</span>
-            <span class="text-sm font-black text-indigo-600">\${grandTotal.toLocaleString()}</span>
-          </div>\` : \`<span class="text-xs text-gray-400">\${rows.length} rows</span>\`}
-        </div>
-        <div class="overflow-x-auto">
-          <table class="min-w-full text-[11px] divide-y divide-gray-100 dark:divide-gray-700">
-            <thead class="bg-gray-50 dark:bg-gray-900/80">
+    <div class="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+      <div class="px-4 py-3 flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
+        <h3 class="text-sm font-semibold">Extracted Table</h3>
+        \${grandTotal ? \`<span class="text-sm font-bold">\${grandTotal.toLocaleString()}</span>\` : \`<span class="text-xs text-gray-400">\${rows.length} rows</span>\`}
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-[11px] divide-y divide-gray-100 dark:divide-gray-700">
+          <thead>
+            <tr class="bg-gray-50 dark:bg-gray-800">
+              <th class="px-4 py-3 text-left font-semibold text-gray-500 uppercase">Hierarchy / Name</th>
+              <th class="px-4 py-3 text-right font-semibold text-gray-500 uppercase">Qty</th>
+              <th class="px-4 py-3 text-right font-semibold text-gray-500 uppercase">Estimation</th>
+              <th class="px-4 py-3 text-right font-semibold text-gray-500 uppercase">Weight</th>
+              <th class="px-4 py-3 text-right font-semibold text-gray-500 uppercase">Unreal. %</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+            \${rows.map(r => \`
               <tr>
-                <th class="px-4 py-3 text-left font-semibold text-gray-500 uppercase">Hierarchy / Name</th>
-                <th class="px-4 py-3 text-right font-semibold text-gray-500 uppercase">Qty</th>
-                <th class="px-4 py-3 text-right font-semibold text-gray-500 uppercase">Estimation</th>
-                <th class="px-4 py-3 text-right font-semibold text-gray-500 uppercase">Weight</th>
-                <th class="px-4 py-3 text-right font-semibold text-gray-500 uppercase">Unreal. %</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-              \${rows.map(r => \`
-                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                  <td class="px-4 py-2.5">
-                    <div class="flex flex-wrap items-center gap-1 mb-0.5">
-                      \${r.category ? \`<span class="text-[8px] px-1.5 py-0.5 rounded font-bold uppercase bg-gray-100 dark:bg-gray-700 text-gray-500">\${r.category}</span>\` : ''}
-                      \${r.subgroup ? \`<span class="text-[8px] font-bold text-indigo-400 uppercase">› \${r.subgroup}</span>\` : ''}
-                      \${r.detail   ? \`<span class="text-[8px] font-bold text-emerald-500 uppercase">› \${r.detail}</span>\` : ''}
-                    </div>
-                    <div class="font-semibold text-gray-900 dark:text-gray-100">\${r.name}</div>
-                  </td>
-                  <td class="px-4 py-2.5 text-right font-mono text-gray-500">\${isNaN(r.qty) ? '—' : r.qty.toLocaleString()}</td>
-                  <td class="px-4 py-2.5 text-right font-mono font-bold text-gray-900 dark:text-white">\${isNaN(r.estimation) ? '—' : r.estimation.toLocaleString()}</td>
-                  <td class="px-4 py-2.5 text-right text-gray-500">\${isNaN(r.weight) ? '—' : r.weight.toFixed(1) + '%'}</td>
-                  <td class="px-4 py-2.5 text-right \${r.unrealized > 0 ? 'text-emerald-600' : r.unrealized < 0 ? 'text-red-500' : 'text-gray-400'}">\${isNaN(r.unrealized) ? '—' : (r.unrealized > 0 ? '+' : '') + r.unrealized.toFixed(1) + '%'}</td>
-                </tr>\`).join('')}
-            </tbody>
-          </table>
-        </div>
+                <td class="px-4 py-2.5">
+                  <div class="flex flex-wrap items-center gap-1 mb-0.5 text-[8px] font-semibold text-gray-400 uppercase">
+                    \${r.category ? \`<span>\${r.category}</span>\` : ''}
+                    \${r.subgroup ? \`<span>› \${r.subgroup}</span>\` : ''}
+                    \${r.detail   ? \`<span>› \${r.detail}</span>\` : ''}
+                  </div>
+                  <div class="font-medium">\${r.name}</div>
+                </td>
+                <td class="px-4 py-2.5 text-right font-mono text-gray-500">\${isNaN(r.qty) ? '—' : r.qty.toLocaleString()}</td>
+                <td class="px-4 py-2.5 text-right font-mono font-semibold">\${isNaN(r.estimation) ? '—' : r.estimation.toLocaleString()}</td>
+                <td class="px-4 py-2.5 text-right text-gray-500">\${isNaN(r.weight) ? '—' : r.weight.toFixed(1) + '%'}</td>
+                <td class="px-4 py-2.5 text-right \${r.unrealized > 0 ? 'text-emerald-600' : r.unrealized < 0 ? 'text-red-500' : 'text-gray-400'}">\${isNaN(r.unrealized) ? '—' : (r.unrealized > 0 ? '+' : '') + r.unrealized.toFixed(1) + '%'}</td>
+              </tr>\`).join('')}
+          </tbody>
+        </table>
       </div>
     </div>\`;
 
@@ -484,44 +470,10 @@ function tryParseJson(raw: string): Record<string, unknown> | null {
 
 function esc(s: string): string { return s.replace(/<\//g, '<\\/') }
 
-function buildSandboxDarkCss(vars?: Record<string, string>): string {
-  const bg  = vars?.['--background'] ?? 'oklch(0.17 0 0)'
-  const fg  = vars?.['--foreground'] ?? 'oklch(0.96 0 0)'
-  // Safety net: force text and hover backgrounds in dark mode using plain CSS so
-  // they work regardless of whether Tailwind's dark: variants initialise in time.
-  // Specificity (0,1,2) beats Tailwind base utilities (0,1,1) but loses to
-  // explicit dark: variants (0,2,1), so intentional per-cell colours still apply.
-  return `html.dark body { background-color: ${bg}; color: ${fg}; }
-html.dark td, html.dark th, html.dark p, html.dark li, html.dark span, html.dark label { color: inherit; }
-html.dark tr:hover > td, html.dark tr:hover > th { background-color: oklch(0.32 0 0) !important; color: inherit !important; }`
-}
-
-// Must be set as a global BEFORE the Tailwind CDN script loads so the CDN
-// picks up darkMode:'class' on initialisation. Using tailwind.config = {...}
-// after the CDN runs is too late — the CDN defaults to 'media' strategy.
-const TAILWIND_CONFIG = `
-tailwind = { config: {
-  darkMode: 'class',
-  theme: {
-    extend: {
-      colors: {
-        gray: {
-          950: '${_sandboxGray[950]}',
-          900: '${_sandboxGray[900]}',
-          800: '${_sandboxGray[800]}',
-          700: '${_sandboxGray[700]}',
-          600: '${_sandboxGray[600]}',
-          500: '${_sandboxGray[500]}',
-          400: '${_sandboxGray[400]}',
-          300: '${_sandboxGray[300]}',
-          200: '${_sandboxGray[200]}',
-          100: '${_sandboxGray[100]}',
-          50:  '${_sandboxGray[50]}',
-        }
-      }
-    }
-  }
-}}`
+// darkMode MUST be set before the CDN loads — the CDN reads it during init.
+// The theme extension is set in a second inline script right after the CDN
+// (still synchronous, before DOMContentLoaded) so the CDN uses it when scanning.
+const TAILWIND_DARK_MODE = `tailwind = { config: { darkMode: 'class' } }`
 
 function buildSandboxDocumentFn(
   rows: Record<string, unknown>[],
@@ -530,7 +482,7 @@ function buildSandboxDocumentFn(
   darkMode: boolean,
   isPdf = false,
   pdfText = '',
-  sandboxDarkVars?: Record<string, string>,
+  sandboxTheme?: Record<string, unknown>,
 ): string {
   const dataJson     = esc(JSON.stringify(rows))
   const datasetsJson = esc(JSON.stringify(datasets))
@@ -542,8 +494,9 @@ function buildSandboxDocumentFn(
 <html${darkClass}>
 <head>
 <meta charset="utf-8">
-<script>${TAILWIND_CONFIG}</script>
+<script>${TAILWIND_DARK_MODE}</script>
 <script src="https://cdn.tailwindcss.com"></script>
+${sandboxTheme ? `<script>tailwind.config=${esc(JSON.stringify({ darkMode: 'class', theme: sandboxTheme }))}</script>` : ''}
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
@@ -556,10 +509,9 @@ html,body{margin:0;padding:0;height:100%;box-sizing:border-box}
 body{padding:8px;font-family:system-ui,-apple-system,sans-serif}
 #r{height:100%}
 *{box-sizing:border-box}
-${buildSandboxDarkCss(sandboxDarkVars)}
 </style>
 </head>
-<body>
+<body class="dark:bg-gray-900 dark:text-gray-100">
 <div id="r"></div>
 <script>
 ${isPdf ? 'if(window.pdfjsLib)window.pdfjsLib.GlobalWorkerOptions.workerSrc="";' : ''}
@@ -598,21 +550,25 @@ window.addEventListener('message', function(e) {
   }
 });
 function parseMoney(s) {
-  if (s === null || s === undefined || s === '') return NaN;
-  if (typeof s === 'number') return isFinite(s) ? s : NaN;
-  s = String(s);
-  var sign = /^\s*-/.test(s) ? -1 : 1;
-  var clean = s.trim().replace(/^[+-]\s*/, '').replace(/[€$£₹¥F*†‡°]+/g, '').trim();
-  if (/\d{7,}/.test(clean.replace(/[\s.,]/g, ''))) return NaN;
-  if (clean.indexOf('/') !== -1) return NaN;
-  if (/[a-zA-Z]/.test(clean)) return NaN;
-  var v = parseFloat(clean.replace(/[^0-9,.]/g, '').replace(/,/g, '.'));
-  return isNaN(v) ? NaN : sign * v;
+  try {
+    if (s === null || s === undefined || s === '') return NaN;
+    if (typeof s === 'number') return isFinite(s) ? s : NaN;
+    s = String(s);
+    var sign = /^\s*-/.test(s) ? -1 : 1;
+    var clean = s.trim().replace(/^[+-]\s*/, '').replace(/[€$£₹¥F*†‡°]+/g, '').trim();
+    if (/\d{7,}/.test(clean.replace(/[\s.,]/g, ''))) return NaN;
+    if (clean.indexOf('/') !== -1) return NaN;
+    if (/[a-zA-Z]/.test(clean)) return NaN;
+    var v = parseFloat(clean.replace(/[^0-9,.]/g, '').replace(/,/g, '.'));
+    return isNaN(v) ? NaN : sign * v;
+  } catch (e) { return NaN; }
 }
 function parseNum(s) {
-  if (s === null || s === undefined || s === '') return NaN;
-  if (typeof s === 'number') return isFinite(s) ? s : NaN;
-  return parseFloat(String(s).replace(/'/g, '').replace(/,/g, '.').replace(/%/g, '').trim());
+  try {
+    if (s === null || s === undefined || s === '') return NaN;
+    if (typeof s === 'number') return isFinite(s) ? s : NaN;
+    return parseFloat(String(s).replace(/'/g, '').replace(/,/g, '.').replace(/%/g, '').trim());
+  } catch (e) { return NaN; }
 }
 function splitCols(s) {
   return String(s || '').split('|').map(function(c){ return c.trim(); });
@@ -631,7 +587,10 @@ function __runFormula() {
     try {
       const fn = new (Object.getPrototypeOf(async function(){}).constructor)('data', 'datasets', 'echarts', 'L', 'console', 'XLSX', 'jsPDF', 'pdfData', 'pdfjsLib', 'pdfText', 'parseMoney', 'parseNum', 'splitCols', ${formulaJson});
       const result = await fn(data, datasets, typeof echarts !== 'undefined' ? echarts : undefined, typeof L !== 'undefined' ? L : undefined, mock, typeof XLSX !== 'undefined' ? XLSX : undefined, window.jspdf ? window.jspdf.jsPDF : undefined, __pdfData, typeof pdfjsLib !== 'undefined' ? pdfjsLib : undefined, pdfText, parseMoney, parseNum, splitCols);
-      if (result && result.html) root.innerHTML = result.html;
+      if (result && result.html) {
+        root.innerHTML = result.html;
+        if (typeof tailwind !== 'undefined' && typeof tailwind.refresh === 'function') tailwind.refresh();
+      }
       parent.postMessage({ t: 'done', data: (result && result.data !== undefined) ? result.data : null }, '*');
     } catch (err) {
       root.innerHTML = '<div class="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 p-3 rounded-lg text-sm m-2"><strong>Error:</strong> ' + err.message + '</div>';
@@ -1037,6 +996,36 @@ export class LocalAssistant {
     return null
   }
 
+  /**
+   * Transparently ask the LLM to fix a syntax error in a formula.
+   * Does NOT modify conversation history. Returns the fixed formula or null on failure.
+   */
+  private async _syntaxHealFormula(
+    formula: string,
+    syntaxError: string,
+    contents: ConversationTurn[],
+  ): Promise<string | null> {
+    const msg = `The formula contains a JavaScript syntax error: "${syntaxError}"\nPlease fix it and return only the corrected JSON with the "formula" field.`
+    try {
+      const res = await this._config.proxy.callGenai({
+        encryptedApiKey: this._config.llm.apiKey ?? '',
+        model: this._config.llm.model ?? 'gemini-3-flash-preview',
+        system_instruction: { parts: [{ text: this._lastSystemPrompt }] },
+        contents: [...contents, { role: 'user', parts: [{ text: msg }] }],
+        generation_config: { thinking_config: { thinking_level: 'high', include_thoughts: true }, temperature: 0.3 },
+      })
+      if (!res.ok) return null
+      const data = await res.json()
+      const parts: Array<{ text?: string; thought?: boolean }> = data.candidates?.[0]?.content?.parts ?? []
+      for (const part of parts) {
+        if (part.thought === true || !part.text) continue
+        const parsed = tryParseJson(part.text)
+        if (parsed?.formula) return String(parsed.formula)
+      }
+    } catch { /* best-effort */ }
+    return null
+  }
+
   getLastSystemPrompt(): string { return this._lastSystemPrompt }
 
   getLastFormula(): string | null {
@@ -1233,6 +1222,27 @@ export class LocalAssistant {
       if (!answer) answer = part.text.trim()
     }
 
+    // Syntax-check the formula and transparently self-heal on error
+    const maxHealing = this._config.formulaHealingRetries ?? 1
+    if (formula && maxHealing > 0) {
+      const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor as new (...args: string[]) => unknown
+      const healContents: ConversationTurn[] = [
+        ...this._history,
+        { role: 'user',  parts: [{ text: llmMessage }] },
+        { role: 'model', parts: [{ text: JSON.stringify({ answer, formula, title, description }) }] },
+      ]
+      for (let attempt = 0; attempt < maxHealing; attempt++) {
+        try { new AsyncFunction(formula); break }
+        catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e)
+          const fixed = await this._syntaxHealFormula(formula, errMsg, healContents)
+          if (!fixed) break
+          formula = fixed
+          healContents[healContents.length - 1] = { role: 'model', parts: [{ text: JSON.stringify({ answer, formula, title, description }) }] }
+        }
+      }
+    }
+
     // Append to conversation history — store llmMessage so PDF context persists across turns
     this._history = [
       ...this._history,
@@ -1266,14 +1276,6 @@ export class LocalAssistant {
   /** Builds the full srcdoc HTML for the analysis iframe. */
   buildSandboxDocument(formula: string): string {
     const active = this.getActiveDataset()
-    // Use explicit config first; fall back to reading the host document's CSS vars.
-    let sandboxDarkVars = this._config.sandboxDarkVars
-    if (!sandboxDarkVars && typeof document !== 'undefined') {
-      const s = getComputedStyle(document.documentElement)
-      const bg = s.getPropertyValue('--background').trim()
-      const fg = s.getPropertyValue('--foreground').trim()
-      if (bg) sandboxDarkVars = { '--background': bg, '--foreground': fg }
-    }
     return buildSandboxDocumentFn(
       active?.rows ?? [],
       this.getDatasets(),
@@ -1281,7 +1283,7 @@ export class LocalAssistant {
       this.darkMode,
       active?.type === 'pdf',
       this.getActivePdfExtractedText(),
-      sandboxDarkVars,
+      this._config.sandboxTheme,
     )
   }
 
