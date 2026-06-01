@@ -48,6 +48,8 @@ Code generation (step 1) and local execution (step 2) are invisible to the user 
 
 > 📄 For a deeper dive into these concepts, read the [LocalFlow white paper](https://localflow.fr/LocalFlow%20-%20white%20paper%20-%20en.pdf).
 
+> 🚀 Try the live demo: [apps.localflow.fr/demo](https://apps.localflow.fr/demo/)
+
 ---
 
 ## Architecture overview
