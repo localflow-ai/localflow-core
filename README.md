@@ -1,5 +1,9 @@
 # LocalFlow Core — Metadata-first AI Framework
 
+[![npm](https://img.shields.io/npm/v/@localflow/core)](https://www.npmjs.com/package/@localflow/core)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Live demo](https://img.shields.io/badge/demo-live-brightgreen)](https://apps.localflow.fr/demo/)
+
 > **Apache 2.0 License** — See [LICENSE](#license) at the bottom of this file.
 
 ---
