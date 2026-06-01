@@ -26,6 +26,8 @@ Metadata-first AI makes the constraint explicit: **only metadata crosses the inf
 | Re-runs without AI (no tokens/GPU) | ❌ | ❌ | ✅ |
 | Works on large datasets | ✅ | Limited | ✅ |
 
+Typical use cases range from **"Talk to your Data"** on sensitive enterprise spreadsheets — where you want natural language querying without exposing values to the model — to large-scale geospatial analysis, document intelligence on confidential PDFs, and any analytical pipeline where deterministic, repeatable results matter.
+
 ### The metadata boundary
 
 LocalFlow defines precisely what constitutes metadata for each data type:
