@@ -158,6 +158,7 @@ const assistant = new LocalAssistant({
 })
 
 // Pass the user's Gemini API key — stored locally, never sent to any third party
+// NOTE: automatically encryted when using an actual proxy
 await assistant.setLlmApiKey('AIza...')
 
 // Persist LLM config whenever it changes (user sets a new key, model, etc.)
