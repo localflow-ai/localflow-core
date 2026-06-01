@@ -48,10 +48,6 @@ Code generation (step 1) and local execution (step 2) are invisible to the user 
 5. **Explainable** — the generated code is fully inspectable; any AI can explain why a formula works or debug why it fails
 6. **Green and sustainable** — AI is used only for code generation, a one-time cost per analysis. Subsequent runs consume no AI inference at all, reducing dependence on energy-intensive infrastructure
 
-> 📄 For a deeper dive into these concepts, read the [LocalFlow white paper](https://localflow.fr/LocalFlow%20-%20white%20paper%20-%20en.pdf).
-
-> 🚀 Try the live demo: [apps.localflow.fr/demo](https://apps.localflow.fr/demo/)
-
 ---
 
 ## Architecture overview
@@ -105,7 +101,10 @@ That boundary is not fixed. The proxy can expose tools — including LLM-powered
 
 ---
 
-> **Want to see it in action?** Try the [LocalFlow online assistant](https://apps.daquota.io/localflow/) — no installation needed. Source: [localflow-app](https://github.com/localflow-ai/localflow-app).
+> [!TIP]
+> **Want to see it in action?** Try the [LocalFlow online assistant example](https://apps.localflow.fr/demo/) — no installation needed. Source: [localflow-examples](https://github.com/localflow-ai/localflow-examples).
+
+> 📄 For a deeper dive into these concepts, read the [LocalFlow white paper](https://localflow.fr/LocalFlow%20-%20white%20paper%20-%20en.pdf).
 
 ## Quick start — embedding `LocalAssistant` in your app
 
