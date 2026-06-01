@@ -422,8 +422,13 @@ function tryParseJson(raw: string): Record<string, unknown> | null {
       if (esc) { esc = false; out += c; continue }
       if (c === '\\') { esc = true; out += c; continue }
       if (c === '"') { inStr = !inStr; out += c; continue }
-      if (inStr && c === '\n') { out += '\\n'; continue }
-      if (inStr && c === '\r') { out += '\\r'; continue }
+      if (inStr) {
+        const code = c.charCodeAt(0)
+        if (c === '\n') { out += '\\n'; continue }
+        if (c === '\r') { out += '\\r'; continue }
+        if (c === '\t') { out += '\\t'; continue }
+        if (code < 0x20) { out += `\\u${code.toString(16).padStart(4, '0')}`; continue }
+      }
       out += c
     }
     return out
@@ -1167,6 +1172,7 @@ export class LocalAssistant {
       ],
       generation_config: {
         thinking_config: { thinking_level: 'high', include_thoughts: true },
+        response_mime_type: 'application/json',
         temperature: 0.5,
       },
     })
