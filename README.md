@@ -8,6 +8,25 @@
 
 ---
 
+## Table of contents
+
+- [What is Metadata-first AI?](#what-is-metadata-first-ai)
+  - [The metadata boundary](#the-metadata-boundary)
+  - [Two-step execution](#two-step-execution)
+  - [Key properties](#key-properties)
+- [Architecture overview](#architecture-overview)
+  - [What leaves the browser?](#what-leaves-the-browser)
+  - [Limitations](#limitations)
+- [Quick start](#quick-start--embedding-localassistant-in-your-app)
+- [Use an actual proxy](#use-an-actual-proxy)
+- [API Reference](#api-reference)
+- [Building](#building)
+- [Package structure](#package-structure)
+- [Roadmap](#roadmap-highlights)
+- [License](#license)
+
+---
+
 ## What is Metadata-first AI?
 
 In **metadata-first AI**, only metadata about your data ever reaches the LLM — column names, statistical samples, document structure. The actual rows, values, and documents stay on your machine. The model acts as a **code generator**: given a description of the data's shape, it writes analysis code that executes locally in a sandbox on your real data.
