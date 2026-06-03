@@ -30,19 +30,21 @@ function deriveSchema(columns: string[], rows: Record<string, unknown>[]): strin
   for (const col of columns) {
     const values = rows.map(r => r[col])
     const nonNull = values.filter(v => v !== null && v !== undefined && v !== '')
+    const nullCount = values.length - nonNull.length
+    const nullSuffix = nullCount > 0 ? `, ${nullCount} null/empty` : ''
     const nums = nonNull.map(v => Number(v)).filter(v => !isNaN(v))
     if (nums.length > 0 && nums.length === nonNull.length) {
-      lines.push(`- ${col}: number — range ${Math.min(...nums)} … ${Math.max(...nums)}`)
+      lines.push(`- ${col}: number — range ${Math.min(...nums)} … ${Math.max(...nums)}${nullSuffix}`)
       continue
     }
     const strs = nonNull.map(v => String(v))
     const unique = Array.from(new Set(strs)).sort()
     if (unique.length <= CATEGORICAL_MAX_ROWS || rows.length <= CATEGORICAL_MAX_ROWS) {
-      lines.push(`- ${col}: categorical — [${unique.map(v => `"${v}"`).join(', ')}]`)
+      lines.push(`- ${col}: categorical — [${unique.map(v => `"${v}"`).join(', ')}]${nullSuffix}`)
       continue
     }
     const sample = unique.slice(0, 3).map(v => `"${v}"`).join(', ')
-    lines.push(`- ${col}: string — ${unique.length} distinct values (e.g. ${sample})`)
+    lines.push(`- ${col}: string — ${unique.length} distinct values (e.g. ${sample})${nullSuffix}`)
   }
   return lines.join('\n')
 }
@@ -134,20 +136,20 @@ Do NOT use \`window\`, \`import\`, or \`require\`. Do NOT call APIs not listed i
 4. **Charts:** Use \`echarts\` (Apache ECharts 5). Generate a unique container ID with \`'chart-' + Date.now()\`. Set an explicit pixel height on the container div (e.g. \`style="height:260px"\`). Always initialise inside \`requestAnimationFrame(() => { const c = echarts.init(el, isDark ? 'dark' : null); c.setOption({...}); })\`. Detect dark mode with \`document.documentElement.classList.contains('dark')\`. In \`reset()\`, call \`echarts.getInstanceByDom(el)?.dispose()\`. Use gradients, rich tooltips, and animations freely — ECharts supports them natively.
 5. **Error Handling:** Use \`try/catch\`. You MUST call \`console.error(error)\` inside the catch block — this is the primary failure signal. Return \`{ html: \\\`<div class="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 p-3 rounded-lg text-sm">\\\${error.message}</div>\\\`, data: {}, reset: () => {} }\`.
 6. **Diagnostic logging:** For any formula involving complex parsing (PDF, raw text) or multiple API calls, add \`console.log\` at key checkpoints: section detection, loop entry, object counts, and format validation. Example: \`console.log('section found, lines:', sectionLines.length)\` or \`console.log('rows extracted:', rows.length)\`. This lets the user immediately see which step diverged from the expected structure without having to re-run with added debug code.
-7. **Safety & Validation:** Always verify that field values exist before operating on them. Handle missing/null/undefined values gracefully.
-7. **No Inline JS:** Do not use \`onclick="..."\`. Use data-attributes and event listeners inside \`requestAnimationFrame(() => { ... })\`.
-8. **Interactivity:** Use unique IDs or specific classes for event listeners to prevent collisions.
-9. **Looping:** Prefer \`for...of\` over \`.forEach()\` — errors bubble correctly and async order is preserved.
-10. **Column access:** Use bracket notation for column names with spaces: \`row['Column Name']\`.
-11. **External calls:** \`fetch()\` is allowed only for APIs listed in AVAILABLE EXTERNAL APIs. All calls are proxied — do not add authentication headers yourself. Use \`await fetch(url)\` directly.
-12. **Counting/grouping:** Use a plain object or \`Map\` to count and group values.
-13. **Maps (Leaflet):** Use \`L\` (Leaflet 1.9.4 global). Pattern:
+7. **Safety & Validation:** Row field values may be \`undefined\`, \`null\`, a number, a Date, or a non-string type — never only strings. NEVER call \`.split()\`, \`.trim()\`, \`.toLowerCase()\`, or any string method directly on a raw field value. Always coerce first: \`const val = String(row['Col'] ?? '')\`. Filter rows that are missing required fields before the processing loop: \`data.filter(r => r['Col'] != null)\`. Skipping this causes \`TypeError: src.split is not a function\` crashes on empty cells.
+8. **No Inline JS:** Do not use \`onclick="..."\`. Use data-attributes and event listeners inside \`requestAnimationFrame(() => { ... })\`.
+9. **Interactivity:** Use unique IDs or specific classes for event listeners to prevent collisions.
+10. **Looping:** Prefer \`for...of\` over \`.forEach()\` — errors bubble correctly and async order is preserved.
+11. **Column access:** Use bracket notation for column names with spaces: \`row['Column Name']\`.
+12. **External calls:** \`fetch()\` is allowed only for APIs listed in AVAILABLE EXTERNAL APIs. All calls are proxied — do not add authentication headers yourself. Use \`await fetch(url)\` directly.
+13. **Counting/grouping:** Use a plain object or \`Map\` to count and group values.
+14. **Maps (Leaflet):** Use \`L\` (Leaflet 1.9.4 global). Pattern:
     - In \`html\`, include a container: \`<div id="\${mapId}" style="height:320px;border-radius:8px;overflow:hidden"></div>\`
     - In \`requestAnimationFrame\`, initialise: \`const map = L.map(mapId).setView([lat,lng], zoom)\` then add \`L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'© OpenStreetMap contributors'}).addTo(map)\`
     - In \`reset()\`, always call \`map.remove()\`
     - Use \`L.marker([lat,lng]).addTo(map).bindPopup(label)\` for points; \`L.circle\`, \`L.polygon\`, etc. for shapes.
     - **CRITICAL — coordinates:** CSV fields are always strings. You MUST call \`parseFloat()\` on every lat/lng value before passing it to Leaflet. Always filter rows first: \`const valid = data.filter(r => { const lat = parseFloat(r[latCol]); const lng = parseFloat(r[lngCol]); return !isNaN(lat) && !isNaN(lng); });\` then use \`parseFloat()\` again when creating markers: \`L.marker([parseFloat(r[latCol]), parseFloat(r[lngCol])])\`. Never pass raw field values directly — even if they look numeric, they are strings and Leaflet will throw \`Invalid LatLng\`.
-14. **Theme-aware styling:** Never hardcode hex, rgb, or hsl values for surfaces, text, or accent colors. Always use Tailwind utility classes — the sandbox palette may be customised by the host app and hardcoded colors will not respect the theme. For accent elements (badges, highlights, links), prefer \`text-primary\`, \`bg-primary\`, \`border-primary\`. For surfaces, use \`bg-white dark:bg-gray-800\`. For body text, use \`text-gray-900 dark:text-gray-100\`. Exception: if the user explicitly requests a specific color for a specific element, you may use a Tailwind color class for that element only.`
+15. **Theme-aware styling:** Never hardcode hex, rgb, or hsl values for surfaces, text, or accent colors. Always use Tailwind utility classes — the sandbox palette may be customised by the host app and hardcoded colors will not respect the theme. For accent elements (badges, highlights, links), prefer \`text-primary\`, \`bg-primary\`, \`border-primary\`. For surfaces, use \`bg-white dark:bg-gray-800\`. For body text, use \`text-gray-900 dark:text-gray-100\`. Exception: if the user explicitly requests a specific color for a specific element, you may use a Tailwind color class for that element only.`
 
   const otherDatasets = Object.entries(datasets).filter(([, r]) => r !== rows)
   const datasetsSection = Object.keys(datasets).length > 0
