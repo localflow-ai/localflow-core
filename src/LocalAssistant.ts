@@ -954,7 +954,7 @@ export class LocalAssistant {
    * Does NOT modify conversation history — this is a transparent background round-trip.
    * Returns the revised formula string, or null if revision failed / no formula returned.
    */
-  async reviseFormula(formula: string, logs: string[]): Promise<string | null> {
+  async reviseFormula(_formula: string, logs: string[]): Promise<string | null> {
     const logBlock = logs.length > 0
       ? (logs.length <= 200
           ? logs.join('\n')
@@ -1008,7 +1008,7 @@ export class LocalAssistant {
    * Does NOT modify conversation history. Returns the fixed formula or null on failure.
    */
   private async _syntaxHealFormula(
-    formula: string,
+    _formula: string,
     syntaxError: string,
     contents: ConversationTurn[],
   ): Promise<string | null> {
