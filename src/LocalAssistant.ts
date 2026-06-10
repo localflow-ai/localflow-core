@@ -1093,7 +1093,6 @@ export class LocalAssistant {
   // -------------------------------------------------------------------------
 
   async prompt(userMessage: string, opts?: { exampleAnalysis?: AnalysisSuggestion | null }): Promise<AssistantResponse> {
-    console.log('[LocalAssistant] prompt()', { protocol: this._config.llm.protocol, model: this._config.llm.model, modelId: this._config.llm.modelId })
     const active = this.getActiveDataset()
     const systemPrompt = buildSystemPromptFn(
       active?.columns ?? [],
