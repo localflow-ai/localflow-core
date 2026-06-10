@@ -1,5 +1,5 @@
 import type { ApiConfig, CrmObjectType } from './types'
-import type { Proxy, GenaiPayload } from './Proxy'
+import type { Proxy, LLMRequest, LLMResponse, LLMModelInfo } from './Proxy'
 
 /**
  * LocalFlow proxy client — delegates all requests to a running LocalFlow proxy server.
@@ -59,12 +59,25 @@ export class ProxyClient implements Proxy {
     return data.decrypted ?? data.message ?? ''
   }
 
-  async callGenai(payload: GenaiPayload): Promise<Response> {
-    return fetch(`${this.baseUrl}/common/genai`, {
+  async callLLM(request: LLMRequest): Promise<LLMResponse> {
+    const res = await fetch(`${this.baseUrl}/common/genai`, {
       method: 'POST',
       headers: this._headers(),
-      body: JSON.stringify(payload),
+      body: JSON.stringify(request),
     })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { error?: string }
+      throw new Error(`LLM [${res.status}]: ${err.error ?? res.statusText}`)
+    }
+    return res.json() as Promise<LLMResponse>
+  }
+
+  async getAvailableLLMs(): Promise<LLMModelInfo[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/common/llm-configs`, { headers: this._headers() })
+      if (!res.ok) return []
+      return res.json()
+    } catch { return [] }
   }
 
   async getApiConfigs(): Promise<ApiConfig[]> {

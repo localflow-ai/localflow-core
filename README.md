@@ -157,8 +157,8 @@ const proxy = new LocalProxy()
 const assistant = new LocalAssistant({
   proxy,
   llm: {
-    type: 'gemini',
-    model: 'gemini-3-flash-preview',   // optional, this is the default
+    protocol: 'gemini',                // 'gemini' | 'openai' | 'anthropic'
+    model: 'gemini-3-flash-preview',   // optional, this is the default for Gemini
   },
 
   // Point to the div where formula results should be rendered.
@@ -166,8 +166,8 @@ const assistant = new LocalAssistant({
   resultContainer: '#result',
 })
 
-// Pass the user's Gemini API key — stored locally, never sent to any third party
-// NOTE: automatically encryted when using an actual proxy
+// Pass the user's API key — stored locally, never sent to any third party
+// NOTE: automatically encrypted when using an actual proxy
 await assistant.setLlmApiKey('AIza...')
 
 // Persist LLM config whenever it changes (user sets a new key, model, etc.)
@@ -181,7 +181,7 @@ To restore a key across page loads, pass it at construction:
 ```typescript
 const assistant = new LocalAssistant({
   proxy,
-  llm: { type: 'gemini', apiKey: localStorage.getItem('llm-key') ?? '' },
+  llm: { protocol: 'gemini', apiKey: localStorage.getItem('llm-key') ?? '' },
   resultContainer: '#result',
 })
 ```
@@ -286,7 +286,7 @@ localStorage.setItem('proxy-token', proxy.token!)
 const proxy = new ProxyClient('https://your-proxy.example.com', localStorage.getItem('proxy-token'))
 await proxy.getSessionInfo()  // throws if expired — re-authenticate if needed
 
-const assistant = new LocalAssistant({ proxy, llm: { type: 'gemini' }, resultContainer: '#result' })
+const assistant = new LocalAssistant({ proxy, llm: { protocol: 'gemini' }, resultContainer: '#result' })
 ```
 
 **Quick testing:** a hosted instance is available at `https://backoffice.daquota.io/v1` — no account needed. You can start with a guest (public) session, or authenticate against your own CRM if you want to test with real data. That said, you probably don't want to point your production CRM at an instance you don't control; use a sandbox or test environment instead.
@@ -359,9 +359,15 @@ interface LocalAssistantConfig {
 }
 
 interface LLMConfig {
-  type: 'gemini' | string  // backend type — only 'gemini' is implemented today
+  // --- BYOK (bring your own key) ---
+  protocol?: 'gemini' | 'openai' | 'anthropic'  // 'openai' covers any OpenAI-compatible endpoint
+  model?: string           // model ID — falls back to protocol default if omitted
   apiKey?: string          // encrypted key restored from storage — set via setLlmApiKey()
-  model?: string           // model ID (default: 'gemini-3-flash-preview')
+  baseUrl?: string         // override the protocol's default endpoint (LocalProxy only)
+
+  // --- Server-managed model (ProxyClient only) ---
+  modelId?: string         // references a model defined in the proxy's llm-configs.json
+                           // the server resolves protocol/model/apiKey/baseUrl from it
 }
 
 // resultContainer accepts any of:
@@ -581,7 +587,8 @@ interface Proxy {
   encryptMessage(message: string): Promise<string>
   decryptMessage(message: string): Promise<string>
 
-  callGenai(payload: GenaiPayload): Promise<Response>
+  callLLM(request: LLMRequest): Promise<LLMResponse>
+  getAvailableLLMs(): Promise<LLMModelInfo[]>
 
   getApiConfigs(): Promise<ApiConfig[]>
   proxyApiCall(url: string, method: string, headers: Record<string, string>, body: string): Promise<Response>
@@ -603,8 +610,8 @@ import { LocalProxy } from '@localflow/core'
 
 new LocalProxy(config?: {
   apis?: ApiConfig[]
-  geminiBaseUrl?: string
-  geminiApiKey?: string          // baked-in key used when no key is set on the assistant
+  geminiBaseUrl?: string         // override Gemini API base URL (testing / custom deployments)
+  geminiApiKey?: string          // baked-in Gemini key used when no key is set on the assistant
   rateLimit?: {
     maxPerDay: number            // per-browser daily cap (tracked in localStorage)
     storageKey?: string          // localStorage key prefix — defaults to '_lf_rl'
@@ -612,9 +619,9 @@ new LocalProxy(config?: {
 })
 ```
 
-**`geminiApiKey`** — a fallback key used when the assistant has no key set. Useful for demos where you want users to try the app without supplying their own key. The user's own key (set via `assistant.setLlmApiKey()`) always takes precedence.
+**`geminiApiKey`** — a fallback Gemini key used when the assistant has no key set. Useful for demos where you want users to try the app without supplying their own key. The user's own key (set via `assistant.setLlmApiKey()`) always takes precedence.
 
-**`rateLimit`** — per-browser daily cap enforced before each `callGenai` call. When the limit is reached, `callGenai` throws `LocalProxyRateLimitError`. Pair with `geminiApiKey` to prevent a single user from exhausting a shared demo key for everyone.
+**`rateLimit`** — per-browser daily cap enforced before each `callLLM` call when using the demo key. When the limit is reached, `callLLM` throws `LocalProxyRateLimitError`. Pair with `geminiApiKey` to prevent a single user from exhausting a shared demo key for everyone.
 
 ```typescript
 import { LocalProxy, LocalProxyRateLimitError, LocalAssistant } from '@localflow/core'
@@ -623,7 +630,7 @@ const proxy = new LocalProxy({
   geminiApiKey: 'AIza...',       // shared demo key — visible in DevTools, use a limited one
   rateLimit: { maxPerDay: 20 },  // generous enough to evaluate, stingy enough to protect the key
 })
-const assistant = new LocalAssistant({ proxy, llm: { type: 'gemini' } })
+const assistant = new LocalAssistant({ proxy, llm: { protocol: 'gemini' } })
 
 try {
   await assistant.prompt('Show me the top 10 by revenue')
@@ -634,9 +641,18 @@ try {
 }
 ```
 
+`LocalProxy` supports three protocols — calls go directly from the browser to the provider's API:
+
+| Protocol | `llm.protocol` | Default model | Notes |
+|----------|----------------|---------------|-------|
+| Gemini | `'gemini'` | `gemini-3-flash-preview` | `geminiApiKey` + rate limiting apply |
+| OpenAI (or compatible) | `'openai'` | `gpt-4o` | Any OpenAI-compatible endpoint via `llm.baseUrl` |
+| Anthropic | `'anthropic'` | `claude-opus-4-5` | Extended thinking supported via `options.thinking` |
+
 | Behaviour | Notes |
 |-----------|-------|
-| `callGenai` | Checks rate limit, then calls Gemini directly from the browser. Uses `geminiApiKey` if no key is set on the assistant. |
+| `callLLM` | Calls the LLM provider directly from the browser. For Gemini, uses `geminiApiKey` if no key is set and applies the rate limit. |
+| `getAvailableLLMs` | Returns `[]` — user configures the model directly via `LLMConfig`. |
 | `encryptMessage` / `decryptMessage` | No-ops — the key is stored and used as plain text |
 | `extractPdf` | Throws — PDF extraction is not available in standalone mode |
 | `listObjectTypes` / `getObjectMetadata` / `getData` | Return empty results — no CRM access |

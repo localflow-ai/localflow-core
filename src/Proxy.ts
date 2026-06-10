@@ -1,12 +1,64 @@
 import type { ApiConfig, CrmObjectType } from './types'
 
-/** Payload sent to the genai endpoint — matches what LocalAssistant constructs. */
-export interface GenaiPayload {
-  encryptedApiKey: string
+/** API protocol used to reach the LLM. 'openai' covers any OpenAI-compatible endpoint. */
+export type LLMProtocol = 'gemini' | 'openai' | 'anthropic'
+
+export interface LLMMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+/** What the client sends to the proxy for an LLM call. */
+export interface LLMRequest {
+  /**
+   * Reference a server-configured model by id (ProxyClient).
+   * When set, the server resolves protocol/model/apiKey/baseUrl from its config.
+   */
+  modelId?: string
+  /** API protocol for direct/BYOK calls. Required when not using modelId. */
+  protocol?: LLMProtocol
+  /** Model identifier. Falls back to protocol default if omitted. */
+  model?: string
+  /**
+   * API key. Plain text for LocalProxy, encrypted via encryptMessage() for ProxyClient.
+   * Omit when using a server-managed modelId and the key lives server-side.
+   */
+  apiKey?: string
+  /**
+   * Override the protocol's default API endpoint.
+   * Used by LocalProxy only — ProxyClient ignores this (endpoint is server-side config).
+   */
+  baseUrl?: string
+  /** Plain-text system prompt. */
+  system: string
+  /** Conversation messages in chronological order. */
+  messages: LLMMessage[]
+  options?: {
+    temperature?: number
+    /** Request JSON-formatted output. */
+    json?: boolean
+    /** Enable extended thinking / chain-of-thought where supported. */
+    thinking?: boolean
+  }
+}
+
+/** Normalised LLM response returned by all proxy implementations. */
+export interface LLMResponse {
+  /** The model's answer (thoughts already stripped). */
+  text: string
+  /** Extended thinking / reasoning trace, if the model produced one. */
+  thoughts?: string
+}
+
+/** Model descriptor returned by getAvailableLLMs() — no keys or internal URLs. */
+export interface LLMModelInfo {
+  /** Stable identifier used in LLMRequest.modelId. */
+  id: string
+  /** Human-readable label for display in the UI. */
+  displayName: string
+  protocol: LLMProtocol
   model: string
-  system_instruction: { parts: Array<{ text: string }> }
-  contents: unknown[]
-  generation_config?: unknown
+  isDefault?: boolean
 }
 
 /**
@@ -34,8 +86,15 @@ export interface Proxy {
   /** Decrypt a previously encrypted string. */
   decryptMessage(message: string): Promise<string>
 
-  /** Send a prompt to the configured LLM and return the raw fetch Response. */
-  callGenai(payload: GenaiPayload): Promise<Response>
+  /** Send a prompt to the configured LLM and return a normalised response. */
+  callLLM(request: LLMRequest): Promise<LLMResponse>
+
+  /**
+   * Return the list of LLM models available on this proxy.
+   * API keys and internal URLs are never included.
+   * Returns [] for LocalProxy (user configures the model directly).
+   */
+  getAvailableLLMs(): Promise<LLMModelInfo[]>
 
   /** Fetch available API configurations. */
   getApiConfigs(): Promise<ApiConfig[]>

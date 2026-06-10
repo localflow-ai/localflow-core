@@ -2,14 +2,31 @@
 // LLM configuration — extensible to support backends beyond Gemini
 // ---------------------------------------------------------------------------
 
-export type LLMType = 'gemini' | string
+import type { LLMProtocol } from './Proxy'
+export type { LLMProtocol }
 
 export interface LLMConfig {
-  type: LLMType
-  /** Encrypted API key (handled by the proxy) */
-  apiKey?: string
-  /** Model identifier. Defaults to 'gemini-3-flash-preview' for Gemini. */
+  /**
+   * API protocol for direct/BYOK calls (LocalProxy or ProxyClient BYOK).
+   * Required when not using a server-managed modelId.
+   * 'openai' covers any OpenAI-compatible endpoint (xiaomimimo, Mistral, Groq, Ollama…).
+   */
+  protocol?: LLMProtocol
+  /**
+   * Reference a server-configured model by id (ProxyClient only).
+   * The server resolves protocol/model/apiKey/baseUrl from llm-configs.json.
+   */
+  modelId?: string
+  /** Model identifier. Falls back to protocol default if omitted. */
   model?: string
+  /** API key. Plain text for LocalProxy; encrypted via encryptMessage() for ProxyClient. */
+  apiKey?: string
+  /**
+   * Override the protocol's default API endpoint.
+   * Enables any OpenAI-compatible or Anthropic-compatible third-party API.
+   * Only meaningful for LocalProxy — ProxyClient ignores this (endpoint is server-side config).
+   */
+  baseUrl?: string
 }
 
 // ---------------------------------------------------------------------------

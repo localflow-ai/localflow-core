@@ -1,8 +1,8 @@
 import type { ApiConfig, CrmObjectType } from './types'
-import type { Proxy, GenaiPayload } from './Proxy'
+import type { Proxy, LLMRequest, LLMResponse, LLMModelInfo, LLMProtocol } from './Proxy'
 
 export interface LocalProxyRateLimit {
-  /** Maximum Gemini requests per calendar day, tracked per browser via localStorage. */
+  /** Maximum requests per calendar day, tracked per browser via localStorage. */
   maxPerDay: number
   /** localStorage key prefix. Defaults to `'_lf_rl'`. */
   storageKey?: string
@@ -30,7 +30,7 @@ export interface LocalProxyConfig {
   rateLimit?: LocalProxyRateLimit
 }
 
-/** Thrown by `callGenai` when the per-browser daily limit is reached. */
+/** Thrown by `callLLM` when the per-browser daily limit is reached. */
 export class LocalProxyRateLimitError extends Error {
   readonly maxPerDay: number
   constructor(maxPerDay: number) {
@@ -41,20 +41,22 @@ export class LocalProxyRateLimitError extends Error {
 }
 
 const DEFAULT_GEMINI_BASE = 'https://generativelanguage.googleapis.com'
+const DEFAULT_OPENAI_BASE = 'https://api.openai.com'
+const DEFAULT_ANTHROPIC_BASE = 'https://api.anthropic.com'
 
 /**
  * Browser-side standalone proxy — no LocalFlow server required.
  *
  * Usage:
  *   const proxy = new LocalProxy()
- *   const assistant = new LocalAssistant({ proxy, llm: { type: 'gemini' } })
+ *   const assistant = new LocalAssistant({ proxy, llm: { protocol: 'gemini', model: 'gemini-3-flash-preview' } })
  *   await assistant.setLlmApiKey('AIza...')
  *
  * No connect() call needed — LocalProxy has no server to authenticate against.
  *
  * Key differences from ProxyClient:
  * - encryptMessage / decryptMessage are no-ops (the plain key is used directly)
- * - callGenai calls the Gemini API directly from the browser (key visible in DevTools)
+ * - callLLM calls the LLM API directly from the browser (key visible in DevTools)
  * - proxyApiCall is a direct browser fetch (subject to CORS on the target server)
  * - extractPdf is not available
  * - CRM methods return empty results
@@ -102,46 +104,144 @@ export class LocalProxy implements Proxy {
 
   isConnected(): boolean { return true }
 
-  async connect(_type?: string, _config?: Record<string, unknown>): Promise<void> {
-    // No-op — LocalProxy has no server to authenticate against.
-  }
+  async connect(_type?: string, _config?: Record<string, unknown>): Promise<void> {}
 
   async getSessionInfo(): Promise<unknown> {
     return { type: 'local', orgId: 'local' }
   }
 
-  isEncrypted(_str: string): boolean {
-    return false
+  isEncrypted(_str: string): boolean { return false }
+
+  async encryptMessage(message: string): Promise<string> { return message }
+
+  async decryptMessage(message: string): Promise<string> { return message }
+
+  async callLLM(request: LLMRequest): Promise<LLMResponse> {
+    const protocol: LLMProtocol = request.protocol ?? 'gemini'
+    switch (protocol) {
+      case 'gemini':    return this._callGemini(request)
+      case 'openai':    return this._callOpenAI(request)
+      case 'anthropic': return this._callAnthropic(request)
+      default:          throw new Error(`[LocalProxy] Unknown protocol: ${protocol}`)
+    }
   }
 
-  async encryptMessage(message: string): Promise<string> {
-    // No-op: the plain key is used directly. It will be visible in DevTools network tab.
-    return message
-  }
-
-  async decryptMessage(message: string): Promise<string> {
-    return message
-  }
-
-  async callGenai(payload: GenaiPayload): Promise<Response> {
-    const { encryptedApiKey, model, system_instruction, contents, generation_config } = payload
-    const usingDemoKey = !encryptedApiKey?.trim()
+  private async _callGemini(request: LLMRequest): Promise<LLMResponse> {
+    const usingDemoKey = !request.apiKey?.trim()
     if (usingDemoKey) this._checkRateLimit()
-    const apiKey = usingDemoKey ? this._geminiApiKey : encryptedApiKey
-    if (!apiKey) throw new Error('[LocalProxy] No Gemini API key configured. Call assistant.setLlmApiKey() or pass geminiApiKey in the LocalProxy constructor.')
+    const apiKey = usingDemoKey ? this._geminiApiKey : request.apiKey
+    if (!apiKey) throw new Error('[LocalProxy] No Gemini API key. Call assistant.setLlmApiKey() or pass geminiApiKey in the LocalProxy constructor.')
+
+    const model = request.model ?? 'gemini-3-flash-preview'
     const url = `${this._geminiBase}/v1beta/models/${model}:generateContent?key=${apiKey}`
-    const response = await fetch(url, {
+    const body: Record<string, unknown> = {
+      system_instruction: { parts: [{ text: request.system }] },
+      contents: request.messages.map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      })),
+      generation_config: {
+        temperature: request.options?.temperature ?? 0.5,
+        ...(request.options?.thinking ? { thinking_config: { thinking_level: 'high', include_thoughts: true } } : {}),
+        ...(request.options?.json    ? { response_mime_type: 'application/json' } : {}),
+      },
+    }
+
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ system_instruction, contents, generation_config }),
+      body: JSON.stringify(body),
     })
     if (usingDemoKey) this._incrementRateLimit()
-    return response
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { error?: { message?: string } }
+      throw new Error(`Gemini [${res.status}]: ${err.error?.message ?? res.statusText}`)
+    }
+
+    const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }> }
+    const parts = data.candidates?.[0]?.content?.parts ?? []
+    return {
+      text:    parts.filter(p => !p.thought && p.text).map(p => p.text).join(''),
+      thoughts: parts.filter(p =>  p.thought && p.text).map(p => p.text).join('') || undefined,
+    }
   }
 
-  async getApiConfigs(): Promise<ApiConfig[]> {
-    return this._apis
+  private async _callOpenAI(request: LLMRequest): Promise<LLMResponse> {
+    const apiKey = request.apiKey?.trim()
+    if (!apiKey) throw new Error('[LocalProxy] No API key for OpenAI protocol. Call assistant.setLlmApiKey() first.')
+
+    const base = request.baseUrl ?? DEFAULT_OPENAI_BASE
+    const body: Record<string, unknown> = {
+      model: request.model ?? 'gpt-4o',
+      messages: [
+        { role: 'system', content: request.system },
+        ...request.messages,
+      ],
+      temperature: request.options?.temperature ?? 0.5,
+    }
+    if (request.options?.json)    body.response_format = { type: 'json_object' }
+    if (request.options?.thinking) body.thinking = { type: 'enabled' }
+
+    const res = await fetch(`${base}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { error?: { message?: string } }
+      throw new Error(`OpenAI [${res.status}]: ${err.error?.message ?? res.statusText}`)
+    }
+
+    const data = await res.json() as { choices?: Array<{ message?: { content?: string; reasoning_content?: string } }> }
+    const msg = data.choices?.[0]?.message
+    return {
+      text:    msg?.content ?? '',
+      thoughts: msg?.reasoning_content || undefined,
+    }
   }
+
+  private async _callAnthropic(request: LLMRequest): Promise<LLMResponse> {
+    const apiKey = request.apiKey?.trim()
+    if (!apiKey) throw new Error('[LocalProxy] No API key for Anthropic protocol. Call assistant.setLlmApiKey() first.')
+
+    const base = request.baseUrl ?? DEFAULT_ANTHROPIC_BASE
+    const thinking = request.options?.thinking ?? false
+    const body: Record<string, unknown> = {
+      model: request.model ?? 'claude-opus-4-5',
+      system: request.system,
+      messages: request.messages,
+      // Anthropic requires max_tokens; must exceed budget_tokens when thinking is on
+      max_tokens: thinking ? 16000 : 8192,
+      // Anthropic requires temperature=1 when thinking is enabled
+      temperature: thinking ? 1 : (request.options?.temperature ?? 0.5),
+    }
+    if (thinking) body.thinking = { type: 'enabled', budget_tokens: 10000 }
+
+    const res = await fetch(`${base}/v1/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { error?: { message?: string } }
+      throw new Error(`Anthropic [${res.status}]: ${err.error?.message ?? res.statusText}`)
+    }
+
+    const data = await res.json() as { content?: Array<{ type: string; text?: string; thinking?: string }> }
+    const blocks = data.content ?? []
+    return {
+      text:    blocks.filter(b => b.type === 'text').map(b => b.text ?? '').join(''),
+      thoughts: blocks.filter(b => b.type === 'thinking').map(b => b.thinking ?? '').join('') || undefined,
+    }
+  }
+
+  async getAvailableLLMs(): Promise<LLMModelInfo[]> { return [] }
+
+  async getApiConfigs(): Promise<ApiConfig[]> { return this._apis }
 
   async proxyApiCall(
     url: string,

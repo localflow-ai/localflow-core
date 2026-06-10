@@ -2,13 +2,12 @@ export { LocalAssistant } from './LocalAssistant'
 export { ProxyClient } from './ProxyClient'
 export { LocalProxy, LocalProxyRateLimitError } from './LocalProxy'
 export { hasApiKey } from './types'
-export type { Proxy, GenaiPayload } from './Proxy'
+export type { Proxy, LLMProtocol, LLMMessage, LLMRequest, LLMResponse, LLMModelInfo } from './Proxy'
 export type { LocalProxyConfig, LocalProxyRateLimit } from './LocalProxy'
 export type {
   LocalAssistantConfig,
   ResultContainer,
   LLMConfig,
-  LLMType,
   AssistantResponse,
   DatasetEntry,
   ApiConfig,

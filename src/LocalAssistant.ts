@@ -4,7 +4,7 @@ import type {
   ConversationTurn, ApiConfig, ApiPreference, ActivatedApi,
   AnalysisMatchHook, AnalysisMatchContext, AnalysisMatchResult,
 } from './types'
-import type { Proxy } from './Proxy'
+import type { Proxy, LLMRequest, LLMMessage } from './Proxy'
 
 const DEFAULT_SANDBOX_PERMISSIONS = [
   'allow-scripts',
@@ -132,7 +132,7 @@ Do NOT use \`window\`, \`import\`, or \`require\`. Do NOT call APIs not listed i
    - \`html\` is an HTML string rendered into the result panel (Tailwind CSS is loaded there).
    - \`data\` is the raw analysis output as plain objects and arrays (it should contain all detailed static data available to the user in \`html\` - for example, if \`html\` contains a table, \`data\` should contain the raw values).
    - \`reset()\` is a function that cleans up all allocated resources (e.g., disposing ECharts instances, removing Leaflet maps).
-3. **Styling:** Use Tailwind CSS utility classes. Dark mode works automatically via \`dark:\` variants (e.g. \`bg-white dark:bg-gray-800\`). Prefer \`rounded-lg\`, \`shadow\`, \`p-4\`, \`text-sm\`, etc. over inline styles. Use \`h-full\` on the outermost wrapper \`div\` so it fills the panel — avoid fixed arbitrary heights like \`h-[750px]\`.
+3. **Styling:** Use Tailwind CSS utility classes. Dark mode works automatically via \`dark:\` variants (e.g. \`bg-white dark:bg-gray-800\`). Prefer \`rounded-lg\`, \`shadow\`, \`p-4\`, \`text-sm\`, etc. over inline styles. Use \`h-full\` on the outermost wrapper \`div\` so it fills the panel — avoid fixed arbitrary heights like \`h-[750px]\`. **Scrollable sections in flex layouts:** when the outer wrapper is \`flex flex-col h-full\` and a section (e.g. a table) should scroll within the remaining space, give that section \`flex-1 min-h-0 overflow-y-auto\`. The \`min-h-0\` is mandatory — without it, flex children default to \`min-height: auto\` and overflow the panel instead of scrolling.
 4. **Charts:** Use \`echarts\` (Apache ECharts 5). Generate a unique container ID with \`'chart-' + Date.now()\`. Set an explicit pixel height on the container div (e.g. \`style="height:260px"\`). Always initialise inside \`requestAnimationFrame(() => { const c = echarts.init(el, isDark ? 'dark' : null); c.setOption({...}); })\`. Detect dark mode with \`document.documentElement.classList.contains('dark')\`. In \`reset()\`, call \`echarts.getInstanceByDom(el)?.dispose()\`. Use gradients, rich tooltips, and animations freely — ECharts supports them natively.
 5. **Error Handling:** Use \`try/catch\`. You MUST call \`console.error(error)\` inside the catch block — this is the primary failure signal. Return \`{ html: \\\`<div class="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 p-3 rounded-lg text-sm">\\\${error.message}</div>\\\`, data: {}, reset: () => {} }\`.
 6. **Diagnostic logging:** For any formula involving complex parsing (PDF, raw text) or multiple API calls, add \`console.log\` at key checkpoints: section detection, loop entry, object counts, and format validation. Example: \`console.log('section found, lines:', sectionLines.length)\` or \`console.log('rows extracted:', rows.length)\`. This lets the user immediately see which step diverged from the expected structure without having to re-run with added debug code.
@@ -949,6 +949,18 @@ export class LocalAssistant {
     })
   }
 
+  private _llmRequestBase(): Omit<LLMRequest, 'system' | 'messages'> {
+    const { llm } = this._config
+    return { modelId: llm.modelId, protocol: llm.protocol, model: llm.model, apiKey: llm.apiKey, baseUrl: llm.baseUrl }
+  }
+
+  private _turnsAsMessages(turns: ConversationTurn[]): LLMMessage[] {
+    return turns.map(t => ({
+      role: t.role === 'model' ? 'assistant' as const : 'user' as const,
+      content: t.parts[0]?.text ?? '',
+    }))
+  }
+
   /**
    * Silently calls the LLM to revise a formula based on its runtime console output.
    * Does NOT modify conversation history — this is a transparent background round-trip.
@@ -972,31 +984,17 @@ export class LocalAssistant {
     ].join('\n')
 
     try {
-      const res = await this._config.proxy.callGenai({
-        encryptedApiKey: this._config.llm.apiKey ?? '',
-        model: this._config.llm.model ?? 'gemini-3-flash-preview',
-        system_instruction: { parts: [{ text: this._lastSystemPrompt }] },
-        contents: [
-          ...this._history,
-          { role: 'user', parts: [{ text: revisionMessage }] },
+      const llmResponse = await this._config.proxy.callLLM({
+        ...this._llmRequestBase(),
+        system: this._lastSystemPrompt,
+        messages: [
+          ...this._turnsAsMessages(this._history),
+          { role: 'user', content: revisionMessage },
         ],
-        generation_config: {
-          thinking_config: { thinking_level: 'high', include_thoughts: true },
-          temperature: 0.3,
-        },
+        options: { thinking: true, json: true, temperature: 0.3 },
       })
-
-      if (!res.ok) return null
-
-      const data = await res.json()
-      const parts: Array<{ text?: string; thought?: boolean }> =
-        data.candidates?.[0]?.content?.parts ?? []
-
-      for (const part of parts) {
-        if (part.thought === true || !part.text) continue
-        const parsed = tryParseJson(part.text)
-        if (parsed?.formula) return String(parsed.formula)
-      }
+      const parsed = tryParseJson(llmResponse.text)
+      if (parsed?.formula) return String(parsed.formula)
     } catch {
       /* revision is best-effort — swallow errors */
     }
@@ -1010,25 +1008,18 @@ export class LocalAssistant {
   private async _syntaxHealFormula(
     _formula: string,
     syntaxError: string,
-    contents: ConversationTurn[],
+    messages: LLMMessage[],
   ): Promise<string | null> {
-    const msg = `The formula contains a JavaScript syntax error: "${syntaxError}"\nPlease fix it and return only the corrected JSON with the "formula" field.`
+    const userMsg = `The formula contains a JavaScript syntax error: "${syntaxError}"\nPlease fix it and return only the corrected JSON with the "formula" field.`
     try {
-      const res = await this._config.proxy.callGenai({
-        encryptedApiKey: this._config.llm.apiKey ?? '',
-        model: this._config.llm.model ?? 'gemini-3-flash-preview',
-        system_instruction: { parts: [{ text: this._lastSystemPrompt }] },
-        contents: [...contents, { role: 'user', parts: [{ text: msg }] }],
-        generation_config: { thinking_config: { thinking_level: 'high', include_thoughts: true }, temperature: 0.3 },
+      const llmResponse = await this._config.proxy.callLLM({
+        ...this._llmRequestBase(),
+        system: this._lastSystemPrompt,
+        messages: [...messages, { role: 'user', content: userMsg }],
+        options: { thinking: true, json: true, temperature: 0.3 },
       })
-      if (!res.ok) return null
-      const data = await res.json()
-      const parts: Array<{ text?: string; thought?: boolean }> = data.candidates?.[0]?.content?.parts ?? []
-      for (const part of parts) {
-        if (part.thought === true || !part.text) continue
-        const parsed = tryParseJson(part.text)
-        if (parsed?.formula) return String(parsed.formula)
-      }
+      const parsed = tryParseJson(llmResponse.text)
+      if (parsed?.formula) return String(parsed.formula)
     } catch { /* best-effort */ }
     return null
   }
@@ -1102,6 +1093,7 @@ export class LocalAssistant {
   // -------------------------------------------------------------------------
 
   async prompt(userMessage: string, opts?: { exampleAnalysis?: AnalysisSuggestion | null }): Promise<AssistantResponse> {
+    console.log('[LocalAssistant] prompt()', { protocol: this._config.llm.protocol, model: this._config.llm.model, modelId: this._config.llm.modelId })
     const active = this.getActiveDataset()
     const systemPrompt = buildSystemPromptFn(
       active?.columns ?? [],
@@ -1164,89 +1156,61 @@ export class LocalAssistant {
       }
     }
 
-    const res = await this._config.proxy.callGenai({
-      encryptedApiKey: this._config.llm.apiKey ?? '',
-      model: this._config.llm.model ?? 'gemini-3-flash-preview',
-      system_instruction: { parts: [{ text: systemPrompt }] },
-      contents: [
-        ...this._history,
-        { role: 'user', parts: [{ text: llmMessage }] },
+    const llmResponse = await this._config.proxy.callLLM({
+      ...this._llmRequestBase(),
+      system: systemPrompt,
+      messages: [
+        ...this._turnsAsMessages(this._history),
+        { role: 'user', content: llmMessage },
       ],
-      generation_config: {
-        thinking_config: { thinking_level: 'high', include_thoughts: true },
-        response_mime_type: 'application/json',
-        temperature: 0.5,
-      },
+      options: { thinking: true, json: true, temperature: 0.5 },
     })
 
-    if (!res.ok) {
-      let detail = res.statusText
-      try {
-        const err = await res.json()
-        detail = err.error?.message ?? err.error ?? detail
-        if (typeof detail === 'object') detail = JSON.stringify(detail)
-      } catch { /* ignore */ }
-      throw new Error(`Gemini [${res.status}]: ${detail}`)
-    }
+    if (!llmResponse.text) throw new Error('LLM returned an empty response')
 
-    const data = await res.json()
-    const parts: Array<{ text?: string; thought?: boolean }> =
-      data.candidates?.[0]?.content?.parts ?? []
-
-    if (!parts.length) throw new Error('Gemini returned an empty response')
-
-    let reasoning = ''; let formula = ''; let answer = ''; let title = ''; let description = ''
+    let formula = ''; let answer = ''; let title = ''; let description = ''
     let dependencies: AnalysisDependencies | undefined
 
-    for (const part of parts) {
-      if (part.thought === true) continue
-      if (!part.text) continue
-
-      const parsed = tryParseJson(part.text)
-      if (parsed) {
-        if (parsed.answer || parsed.formula || parsed.reasoning) {
-          reasoning    = String(parsed.reasoning   ?? reasoning)
-          formula      = String(parsed.formula     ?? formula)
-          answer       = String(parsed.answer      ?? answer)
-          title        = String(parsed.title       ?? title)
-          description  = String(parsed.description ?? description)
-          if (parsed.dependencies && typeof parsed.dependencies === 'object') {
-            const raw = parsed.dependencies as Record<string, unknown>
-            dependencies = {
-              data: Array.isArray(raw.data) ? (raw.data as unknown[]).filter((x): x is string => typeof x === 'string') : [],
-              datasets: (raw.datasets && typeof raw.datasets === 'object' && !Array.isArray(raw.datasets))
-                ? Object.fromEntries(
-                    Object.entries(raw.datasets as Record<string, unknown>)
-                      .filter(([, v]) => Array.isArray(v))
-                      .map(([k, v]) => [k, (v as unknown[]).filter((x): x is string => typeof x === 'string')])
-                  )
-                : {},
-            }
-          }
+    const parsed = tryParseJson(llmResponse.text)
+    if (parsed) {
+      formula      = String(parsed.formula     ?? '')
+      answer       = String(parsed.answer      ?? '')
+      title        = String(parsed.title       ?? '')
+      description  = String(parsed.description ?? '')
+      if (parsed.dependencies && typeof parsed.dependencies === 'object') {
+        const raw = parsed.dependencies as Record<string, unknown>
+        dependencies = {
+          data: Array.isArray(raw.data) ? (raw.data as unknown[]).filter((x): x is string => typeof x === 'string') : [],
+          datasets: (raw.datasets && typeof raw.datasets === 'object' && !Array.isArray(raw.datasets))
+            ? Object.fromEntries(
+                Object.entries(raw.datasets as Record<string, unknown>)
+                  .filter(([, v]) => Array.isArray(v))
+                  .map(([k, v]) => [k, (v as unknown[]).filter((x): x is string => typeof x === 'string')])
+              )
+            : {},
         }
-        continue
       }
-      if (part.text.trimStart().startsWith('{') || part.text.trimStart().startsWith('[')) continue
-      if (!answer) answer = part.text.trim()
+    } else {
+      answer = llmResponse.text.trim()
     }
 
     // Syntax-check the formula and transparently self-heal on error
     const maxHealing = this._config.formulaHealingRetries ?? 1
     if (formula && maxHealing > 0) {
       const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor as new (...args: string[]) => unknown
-      const healContents: ConversationTurn[] = [
-        ...this._history,
-        { role: 'user',  parts: [{ text: llmMessage }] },
-        { role: 'model', parts: [{ text: JSON.stringify({ answer, formula, title, description }) }] },
+      const healMessages: LLMMessage[] = [
+        ...this._turnsAsMessages(this._history),
+        { role: 'user',      content: llmMessage },
+        { role: 'assistant', content: JSON.stringify({ answer, formula, title, description }) },
       ]
       for (let attempt = 0; attempt < maxHealing; attempt++) {
         try { new AsyncFunction(formula); break }
         catch (e) {
           const errMsg = e instanceof Error ? e.message : String(e)
-          const fixed = await this._syntaxHealFormula(formula, errMsg, healContents)
+          const fixed = await this._syntaxHealFormula(formula, errMsg, healMessages)
           if (!fixed) break
           formula = fixed
-          healContents[healContents.length - 1] = { role: 'model', parts: [{ text: JSON.stringify({ answer, formula, title, description }) }] }
+          healMessages[healMessages.length - 1] = { role: 'assistant', content: JSON.stringify({ answer, formula, title, description }) }
         }
       }
     }
@@ -1259,7 +1223,7 @@ export class LocalAssistant {
     ]
 
     const response: AssistantResponse = {
-      answer: answer || reasoning,
+      answer,
       formula,
       title: title || undefined,
       description: description || undefined,
