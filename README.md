@@ -289,7 +289,7 @@ await proxy.getSessionInfo()  // throws if expired — re-authenticate if needed
 const assistant = new LocalAssistant({ proxy, llm: { protocol: 'gemini' }, resultContainer: '#result' })
 ```
 
-**Quick testing:** a hosted instance is available at `https://backoffice.daquota.io/v1` — no account needed. You can start with a guest (public) session, or authenticate against your own CRM if you want to test with real data. That said, you probably don't want to point your production CRM at an instance you don't control; use a sandbox or test environment instead.
+**Quick testing:** a hosted instance is available at `https://backoffice.daquota.io/demo` — no account needed. You can start with a guest (public) session, or authenticate against your own CRM if you want to test with real data. That said, you probably don't want to point your production CRM at an instance you don't control; use a sandbox or test environment instead.
 
 **Self-hosting:** for production use, run your own instance — see the [localflow-proxy](https://github.com/localflow-ai/localflow-proxy) repository for setup instructions.
 
@@ -672,7 +672,7 @@ const proxy = new ProxyClient(baseUrl, token?)
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `baseUrl` | `string` | LocalFlow proxy base URL (e.g. `'https://backoffice.daquota.io/v1'`) |
+| `baseUrl` | `string` | LocalFlow proxy base URL (e.g. `'https://backoffice.daquota.io/demo'`) |
 | `token` | `string \| null` | Optional — restore a previously saved session token |
 
 ##### Session
