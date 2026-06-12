@@ -719,6 +719,8 @@ const rows  = await proxy.getData('res.partner', ['name', 'email', 'country_id']
 
 ## Building
 
+> **Prerequisites:** Node.js 20+ (only needed to build the library — at runtime it is browser-only)
+
 ```bash
 cd localflow-core
 npm install
