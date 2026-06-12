@@ -166,8 +166,10 @@ const assistant = new LocalAssistant({
   resultContainer: '#result',
 })
 
-// Pass the user's API key — stored locally, never sent to any third party
-// NOTE: automatically encrypted when using an actual proxy
+// Pass the user's API key — kept in the browser, sent only to the LLM provider.
+// With LocalProxy it is stored as-is (fine for development). With an actual
+// proxy (ProxyClient), the key is proxy-encrypted once, the clear key is
+// discarded, and only the encrypted form is ever stored or sent per request.
 await assistant.setLlmApiKey('AIza...')
 
 // Persist LLM config whenever it changes (user sets a new key, model, etc.)
