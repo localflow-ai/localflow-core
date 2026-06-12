@@ -5,3 +5,5 @@ package-lock.json
 *.log
 .DS_Store
 proxy.js
+tsconfig.tsbuildinfo
+white-paper.tex
