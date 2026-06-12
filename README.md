@@ -740,6 +740,7 @@ localflow-core/
     ├── Proxy.ts          # Proxy interface contract
     ├── LocalProxy.ts     # browser-only Proxy implementation
     ├── ProxyClient.ts    # HTTP proxy client
+    ├── theme.ts          # default sandbox Tailwind theme
     └── types.ts          # all public TypeScript interfaces
 ```
 
@@ -747,12 +748,13 @@ localflow-core/
 
 ## Roadmap highlights
 
-- [ ] Pluggable LLM backends (OpenAI, Anthropic, Mistral, Ollama)
+- [ ] Additional LLM backends (Mistral, Ollama)
 - [ ] Interactive formula results (action buttons returned by formulas)
 - [ ] Async / streaming formula execution
 
 ### Recently shipped
 
+- [x] **Multi-protocol LLM support** — Gemini, OpenAI (and compatible endpoints), Anthropic
 - [x] **Published to npm** — available as `@localflow/core`
 - [x] **PDF document support** — PDFs as first-class datasets; text extracted via the proxy, full document text injected into LLM context
 - [x] **Data flow awareness** — `data:local` / `data:proxy` / `data:llm` events; animated status chip in the header; session history popover; sandbox safety indicator
