@@ -497,6 +497,15 @@ Renders a formula in the configured `resultContainer`. Creates the sandboxed ifr
 assistant.executeFormula(savedAnalysis.formula)
 ```
 
+##### `buildSandboxDocument(formula)`
+
+Lower-level alternative to `resultContainer` / `executeFormula`: returns the full sandbox HTML document for a formula as a string, so you can drive the iframe yourself. Useful when you need fine-grained control over the iframe lifecycle — loading states, tabbed layouts, or rendering into a framework-managed element. You are then responsible for the iframe's `sandbox` attribute (see `DEFAULT_SANDBOX` above).
+
+```typescript
+const { formula } = await assistant.prompt('Break down revenue by region')
+iframe.srcdoc = assistant.buildSandboxDocument(formula)
+```
+
 ##### `destroy()`
 
 Removes the managed iframe and cleans up all event listeners. Call when the assistant is no longer needed.
