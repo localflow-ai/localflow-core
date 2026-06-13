@@ -14,8 +14,6 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [0.1.5] — 2026-06-01
 
-First public npm releases. Versions 0.1.1–0.1.5 were same-day publishing iterations; the feature set they established:
-
 ### Added
 - Published to npm as `@localflow/core`.
 - PDF documents as first-class datasets — text extracted via the proxy, full document text injected into the LLM context.

@@ -16,6 +16,6 @@ The `@localflow/core` library — metadata-first AI framework (`LocalAssistant`,
 2. In `CHANGELOG.md`, rename `[Unreleased]` to the new version with today's date; add a fresh empty `[Unreleased]`; update the compare links at the bottom.
 3. `npm run build`.
 4. `npm publish`.
-5. `git tag <version>` — **unprefixed** (e.g. `0.2.0`) to match npm and the `0.1.5` tag. (Older `v0.1.x` tags used a `v` prefix inconsistently — don't follow that.)
+5. `git tag <version>` (unprefixed, e.g. `0.2.0`) and `git push origin <version>`.
 
-> Known gap: `0.2.0` is published on npm but was never git-tagged. Backfill with `git tag 0.2.0 <commit>` when convenient.
+> CHANGELOG documents `0.1.5` and `0.2.0`+. The same-day `0.1.1`–`0.1.4` prototype tags exist but aren't worth documenting — ignore them.
