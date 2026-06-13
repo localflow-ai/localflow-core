@@ -5,6 +5,7 @@ import type {
   AnalysisMatchHook, AnalysisMatchContext, AnalysisMatchResult,
 } from './types'
 import type { Proxy, LLMRequest, LLMMessage } from './Proxy'
+import { parseMoney, parseNum, splitCols } from './sandboxHelpers'
 
 const DEFAULT_SANDBOX_PERMISSIONS = [
   'allow-scripts',
@@ -112,8 +113,8 @@ The formula runs as the body of an async function. The following globals are inj
 - \`jsPDF\`: jsPDF 2.x constructor. Use it **only when the user explicitly asks for a PDF file**. Create structured multi-page PDFs with text, shapes, images and tables. Page numbers: iterate pages and call \`doc.text('Page X / Y', x, y)\`. To download: \`doc.save('filename.pdf')\`.
 ${activeDatasetType === 'pdf' ? `- \`pdfData\`: Uint8Array — raw bytes of the active PDF document.
 - \`pdfjsLib\`: PDF.js 3.x — use it to parse the PDF. Worker is disabled for sandbox compatibility (all parsing runs in the main thread).` : ''}
-- \`parseMoney(s)\`: use for any monetary column (debit, credit, balance, amount, price, total). Returns NaN for non-monetary strings (account numbers, codes with '/', strings with letters) — safe to call on every column value.
-- \`parseNum(s)\`: use for other numeric columns (quantities, percentages, counts). Does not validate format.
+- \`parseMoney(s)\`: use for any monetary column (debit, credit, balance, amount, price, total). Handles thousands separators (space/apostrophe), a decimal comma, and a trailing currency/unit code (EUR, CHF, UNT). Returns NaN for non-monetary strings (account/reference numbers, codes with '/', descriptions) — safe to call on every column value.
+- \`parseNum(s)\`: use for other numeric columns (quantities, prices, percentages, counts). Handles thousands separators (space/apostrophe) and a decimal comma; a trailing unit is ignored. Does not reject non-numeric input the way parseMoney does.
 - \`splitCols(line)\`: splits a pipe-separated pdfText line into a trimmed array of column strings.
 Do NOT redefine \`parseMoney\`, \`parseNum\`, or \`splitCols\` — they are already available as globals.
 Do NOT use \`window\`, \`import\`, or \`require\`. Do NOT call APIs not listed in AVAILABLE EXTERNAL APIs.`
@@ -556,30 +557,12 @@ window.addEventListener('message', function(e) {
     else { p.res(new Response(d.body, { status: d.status, statusText: d.statusText, headers: new Headers(d.headers || {}) })); }
   }
 });
-function parseMoney(s) {
-  try {
-    if (s === null || s === undefined || s === '') return NaN;
-    if (typeof s === 'number') return isFinite(s) ? s : NaN;
-    s = String(s);
-    var sign = /^\s*-/.test(s) ? -1 : 1;
-    var clean = s.trim().replace(/^[+-]\s*/, '').replace(/[€$£₹¥F*†‡°]+/g, '').trim();
-    if (/\d{7,}/.test(clean.replace(/[\s.,]/g, ''))) return NaN;
-    if (clean.indexOf('/') !== -1) return NaN;
-    if (/[a-zA-Z]/.test(clean)) return NaN;
-    var v = parseFloat(clean.replace(/[^0-9,.]/g, '').replace(/,/g, '.'));
-    return isNaN(v) ? NaN : sign * v;
-  } catch (e) { return NaN; }
-}
-function parseNum(s) {
-  try {
-    if (s === null || s === undefined || s === '') return NaN;
-    if (typeof s === 'number') return isFinite(s) ? s : NaN;
-    return parseFloat(String(s).replace(/'/g, '').replace(/,/g, '.').replace(/%/g, '').trim());
-  } catch (e) { return NaN; }
-}
-function splitCols(s) {
-  return String(s || '').split('|').map(function(c){ return c.trim(); });
-}
+// Column/number parsing helpers — single source of truth in ./sandboxHelpers.
+// Injected as real source via toString() so the sandbox gets correct regex
+// escapes (template-literal cooking would strip lone backslashes).
+${parseMoney.toString()}
+${parseNum.toString()}
+${splitCols.toString()}
 function __runFormula() {
   (async () => {
     const data = ${dataJson};
