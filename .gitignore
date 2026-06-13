@@ -7,3 +7,4 @@ package-lock.json
 proxy.js
 tsconfig.tsbuildinfo
 white-paper.tex
+test/fixtures/

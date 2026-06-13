@@ -1,7 +1,9 @@
 {
   "name": "@localflow/core",
   "version": "0.2.0",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "description": "Metadata-first AI framework — the LLM receives only schema and column names, generates deterministic code, executes locally on your data",
   "license": "Apache-2.0",
   "type": "module",
@@ -19,9 +21,12 @@
   ],
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
-    "typescript": "~6.0.2"
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.8"
   }
 }
