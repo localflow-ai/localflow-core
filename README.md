@@ -29,7 +29,7 @@
   - [`Proxy` / `LocalProxy` / `ProxyClient`](#proxy-api-reference)
 - [Building](#building)
 - [Package structure](#package-structure)
-- [Roadmap](#roadmap-highlights)
+- [Roadmap & changelog](#roadmap--changelog)
 - [License](#license)
 
 ---
@@ -759,21 +759,10 @@ localflow-core/
 
 ---
 
-## Roadmap highlights
+## Roadmap & changelog
 
-- [ ] Additional LLM backends (Mistral, Ollama)
-- [ ] Interactive formula results (action buttons returned by formulas)
-- [ ] Async / streaming formula execution
-
-### Recently shipped
-
-- [x] **Multi-protocol LLM support** — Gemini, OpenAI (and compatible endpoints), Anthropic
-- [x] **Published to npm** — available as `@localflow/core`
-- [x] **PDF document support** — PDFs as first-class datasets; text extracted via the proxy, full document text injected into LLM context
-- [x] **Data flow awareness** — `data:local` / `data:proxy` / `data:llm` events; animated status chip in the header; session history popover; sandbox safety indicator
-- [x] **Configurable proxy URL** — proxy URL configurable at runtime; persisted in localStorage
-- [x] **CRM connectors** — Odoo and Salesforce authentication and data loading via `ProxyClient`
-- [x] **Formula self-healing** — `formulaHealingRetries` config option; syntax errors are caught and silently retried before returning to the caller (default: 1)
+- **[ROADMAP.md](ROADMAP.md)** — what's planned and under consideration.
+- **[CHANGELOG.md](CHANGELOG.md)** — release history.
 
 ---
 
