@@ -253,7 +253,7 @@ export class LocalProxy implements Proxy {
   }
 
   async extractPdf(_buffer: ArrayBuffer, _searchString?: string): Promise<{ text: string; pageCount: number }> {
-    throw new Error('[LocalProxy] PDF extraction is not available in standalone mode.')
+    throw new Error('[LocalProxy] PDF extraction is not available in standalone mode. Connect a real proxy via ProxyClient — it extracts PDFs server-side (pdfplumber) for layout-accurate results.')
   }
 
   async listObjectTypes(): Promise<CrmObjectType[]> { return [] }
