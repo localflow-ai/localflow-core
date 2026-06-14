@@ -168,8 +168,14 @@ The full document text is included in the conversation — use it to understand 
 In formulas: use \`pdfText\` (pre-extracted string) split by '\\n' to process line by line. Pages are separated by "## Page N" headers.
 Do NOT use \`data\` (empty). \`pdfData\` + \`pdfjsLib\` are available for raw positional extraction if needed.
 
+*STRUCTURE FIRST — separate static from dynamic*:
+A document TYPE is defined by its STATIC structure: the parts identical in every document of that type — column-header lines, field labels and consolidation captions (an identifier/reference label, a total caption, a date label…). Everything else is DYNAMIC: values, line items, section names, counts. Anchor on the static parts to locate and read the dynamic ones; never hardcode a dynamic value.
+- **Pass 0 — verify the structure, then fail fast.** Before extracting, confirm the document's static anchors are present (the specific header line, the key captions). If they are missing, return immediately with a clear message (e.g. \`data: { error: 'unexpected document structure' }\`) and stop. One analysis targets ONE structure; a document with a different structure is a different type that needs its own analysis. A formula sees only the CURRENT document, so it can only check the structure it can see — it cannot enumerate the anchors of types it has never been shown. "Classification" therefore takes the form of a STRUCTURE CHECK: build a portable predicate from this document's static anchors ("is another document the same type as this one?"). Because a formula re-runs on any document at no AI cost, that predicate detects the same type elsewhere; distinguishing among several types is done by running several such per-type predicates — app-level wiring, not one formula.
+- **Derive the structure from THIS document — never assume one.** Layouts vary widely: a total/summary may appear BEFORE the line items or AFTER them; sections may be flat or nested; nesting, when present, is usually encoded in the VALUES, not in indentation. Read the actual static skeleton in front of you and follow it — do not import a fixed layout ("the total is the last row", "two header lines mean two levels") from another document.
+- **Not every analysis is extraction.** The same static-anchor method answers a targeted question (find a value by its static label, then read the dynamic value beside it) or classifies a document — it does not only build tables.
+
 *EXTRACTION STRATEGY*:
-Before writing any formula, read the pdfText carefully to understand: which sections exist, where the relevant table is, what the column headers are, and what a data row looks like vs. a header or subtotal row.
+Before writing any formula, read the pdfText carefully to understand: which static anchors identify this document type, where the relevant data is, what the column headers are, and what a data row looks like vs. a header or subtotal row.
 
 Then follow these principles:
 1. **MANDATORY: two-pass algorithm — no exceptions.** You MUST NOT write a formula that classifies and extracts values in the same loop. This is a hard constraint, not a style preference. Any formula that mixes detection and extraction will be wrong.
@@ -253,139 +259,101 @@ ${exampleAnalysis.formula.split('\n').slice(0, 160).join('\n')}
 \`\`\`` : ''
 
   const pdfExample = activeDatasetType === 'pdf' ? `\
-# REQUIRED PATTERN — Extract a table from pdfText (two-pass with hierarchy)
-Adapt: section keywords, NOISE set, column end-offsets (-N), and the isDataRow test.
+# ILLUSTRATIONS — adapt to THIS document; never copy verbatim
+These show the METHOD (verify the static structure, then anchor on static text to read dynamic values). The real layout — where the total sits, whether sections are flat or nested — is whatever this document shows. Adapt the static anchors, the row test, and the column mapping.
+
+## A) Extract a table
 \`\`\`js
 try {
-  // parseMoney, parseNum, and splitCols are pre-injected globals — do NOT redefine them.
-  // Use splitCols(line) to split any pdfText line into columns (handles trailing-pipe edge cases).
-  // Use parseMoney for debit/credit/balance/amount columns, parseNum for quantities/percentages.
+  // parseMoney, parseNum, splitCols are pre-injected globals — do NOT redefine them.
 
-  // Static labels to skip — column headers and navigation text that repeat on every page.
-  // Identify them by reading pdfText; they are always the same string across documents.
+  // Pass 0 — STRUCTURE CHECK: confirm this is the expected document type via its
+  // static anchors (the exact column-header line / captions). Fail fast otherwise.
+  if (!/STATIC COLUMN A.*STATIC COLUMN B.*STATIC COLUMN C/i.test(pdfText)) {
+    return { html: '<div class="p-3 bg-amber-50 text-amber-800 rounded text-sm">Unexpected document structure.</div>',
+             data: { error: 'structure check failed' }, reset: () => {} };
+  }
+
+  // Static labels to skip — column headers / navigation text that repeat on every page.
   const NOISE = new Set(['STATIC COLUMN HEADER 1', 'STATIC COLUMN HEADER 2']);
 
-  // ── Pass 1: collect and classify lines inside the section ──────────────────
+  // Pass 1 — classify lines (data row vs section header vs total). Use the i flag
+  // (PDF text is mixed-case). Anchor the section window on STATIC titles.
   const lines = [];
   let inSection = false;
-
   for (const raw of pdfText.split('\\n')) {
     const t = raw.trimEnd();
     if (!t.trim() || t.startsWith('## Page')) continue;
-
-    // Always use regex with i flag — PDF extraction produces mixed-case text
     if (!inSection && /SECTION TITLE/i.test(t))      { inSection = true; continue; }
     if (inSection  && /NEXT SECTION TITLE/i.test(t)) { inSection = false; break; }
     if (!inSection) continue;
 
     const cols  = splitCols(t);
-    const label = cols[0].replace(/ \\(suite\\)$/i, '').trim(); // strip " (suite)" continuations
-
+    const label = cols[0].trim();
     if (NOISE.has(label)) continue;
 
-    // isDataRow  — first column starts with a digit or apostrophe (quantity-led rows)
-    // isHeader   — no leading digit AND multiple columns (static category / sub-category label)
-    // isTotal    — regex with i flag so mixed-case PDF output still matches
-    const isDataRow = /^[\\d']/.test(label);
-    const isHeader  = !isDataRow && cols.length > 1;
+    // Decide these tests from THIS document: a data row's key column matches a
+    // stable IDENTIFIER shape; a header is a non-data label line; the total row
+    // carries the document's total caption. Do NOT assume where the total sits.
+    const isDataRow = /^[A-Z]{2}[A-Z0-9]{10}$/.test(label);   // e.g. an ISIN — adapt the shape
     const isTotal   = /^total\\b/i.test(label);
-
+    const isHeader  = !isDataRow && !isTotal && cols.length > 1;
     lines.push({ label, cols, isDataRow, isHeader, isTotal });
   }
 
-  // ── Pass 2: build rows, tracking the 3-level hierarchy context ─────────────
+  // Pass 2 — read values. Map columns from the STATIC header, not magic indices.
   const rows = [];
-  let path     = [];   // [level-1, level-2, level-3] — updated by header blocks
+  let section = '';
   let grandTotal = 0;
-
-  for (let i = 0; i < lines.length; i++) {
-    const { label, cols, isDataRow, isHeader, isTotal } = lines[i];
-
+  for (const { label, cols, isDataRow, isHeader, isTotal } of lines) {
     if (isTotal) {
-      // Grand total row — capture the summary value (adapt column index as needed)
-      grandTotal = parseNum(cols[cols.length - 2]);
-      continue;
-    }
-
-    if (isHeader) {
-      // Consecutive headers form one context block defining the hierarchy level(s)
-      const block = [label];
-      while (i + 1 < lines.length && lines[i + 1].isHeader) block.push(lines[++i].label);
-      // 2+ consecutive headers reset the full path; a single header updates the deepest level
-      path = block.length >= 2 ? [...block] : [...path.slice(0, -1), label];
-      continue;
-    }
-
-    if (isDataRow) {
-      // First column combines quantity and name: e.g. "1'140 PICTET-ST MONEY MARKET EUR-I"
-      const m = label.match(/^([\\d'][\\d'.]*) (.+)/);
-      if (!m) continue;
-      const qty = parseNum(m[1]);
-      if (isNaN(qty)) continue;
-
-      // End-counting: last columns are most stable when rows have varying widths.
-      // Inspect the column header row in pdfText to map -N offsets to actual fields.
-      const estimation = parseNum(cols.length > 4 ? cols[cols.length - 3] : cols[cols.length - 2]);
-      const weight     = parseNum(cols[cols.length - 2]);
-      const unrealized = parseNum(cols[cols.length - 1]);
-
-      if (!isNaN(estimation)) {
-        rows.push({
-          category:  path[0] ?? '',
-          subgroup:  path[1] ?? '',
-          detail:    path[2] ?? '',
-          name:      m[2].trim(),
-          qty, estimation, weight, unrealized,
-        });
-      }
+      // The printed total — prefer it as a CROSS-CHECK only; summing the rows is
+      // more reliable (extractors often mis-column a total row). Read it where THIS
+      // document puts it — it may be the first row of the table or the last.
+      grandTotal = parseMoney(cols[cols.length - 2]);
+    } else if (isHeader) {
+      // Current section. If sections are NESTED, do not infer depth from header
+      // adjacency (unreliable) — nesting is usually encoded in the VALUES (a parent
+      // subtotal equals the sum of its children). Flat list → most recent header.
+      section = label;
+    } else if (isDataRow) {
+      const valuation = parseMoney(cols[cols.length - 3]);   // map offset from the static header
+      if (isNaN(valuation)) continue;
+      rows.push({ section, name: cols[1].trim(), valuation });
     }
   }
+  if (!rows.length) throw new Error('No rows found — re-check the static anchors and the row test');
 
-  if (!rows.length) throw new Error('No rows found — check section keywords and NOISE set');
-
-  const html = \`
-    <div class="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
-      <div class="px-4 py-3 flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
-        <h3 class="text-sm font-semibold">Extracted Table</h3>
-        \${grandTotal ? \`<span class="text-sm font-bold">\${grandTotal.toLocaleString()}</span>\` : \`<span class="text-xs text-gray-400">\${rows.length} rows</span>\`}
-      </div>
-      <div class="overflow-x-auto">
-        <table class="min-w-full text-[11px] divide-y divide-gray-100 dark:divide-gray-700">
-          <thead>
-            <tr class="bg-gray-50 dark:bg-gray-800">
-              <th class="px-4 py-3 text-left font-semibold text-gray-500 uppercase">Hierarchy / Name</th>
-              <th class="px-4 py-3 text-right font-semibold text-gray-500 uppercase">Qty</th>
-              <th class="px-4 py-3 text-right font-semibold text-gray-500 uppercase">Estimation</th>
-              <th class="px-4 py-3 text-right font-semibold text-gray-500 uppercase">Weight</th>
-              <th class="px-4 py-3 text-right font-semibold text-gray-500 uppercase">Unreal. %</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-            \${rows.map(r => \`
-              <tr>
-                <td class="px-4 py-2.5">
-                  <div class="flex flex-wrap items-center gap-1 mb-0.5 text-[8px] font-semibold text-gray-400 uppercase">
-                    \${r.category ? \`<span>\${r.category}</span>\` : ''}
-                    \${r.subgroup ? \`<span>› \${r.subgroup}</span>\` : ''}
-                    \${r.detail   ? \`<span>› \${r.detail}</span>\` : ''}
-                  </div>
-                  <div class="font-medium">\${r.name}</div>
-                </td>
-                <td class="px-4 py-2.5 text-right font-mono text-gray-500">\${isNaN(r.qty) ? '—' : r.qty.toLocaleString()}</td>
-                <td class="px-4 py-2.5 text-right font-mono font-semibold">\${isNaN(r.estimation) ? '—' : r.estimation.toLocaleString()}</td>
-                <td class="px-4 py-2.5 text-right text-gray-500">\${isNaN(r.weight) ? '—' : r.weight.toFixed(1) + '%'}</td>
-                <td class="px-4 py-2.5 text-right \${r.unrealized > 0 ? 'text-emerald-600' : r.unrealized < 0 ? 'text-red-500' : 'text-gray-400'}">\${isNaN(r.unrealized) ? '—' : (r.unrealized > 0 ? '+' : '') + r.unrealized.toFixed(1) + '%'}</td>
-              </tr>\`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>\`;
-
-  return { html, data: { rows, grandTotal }, reset: () => {} };
+  const total = grandTotal || rows.reduce((s, r) => s + r.valuation, 0);   // derive if not printed / as cross-check
+  const html = \`<div class="p-3 text-sm">\${rows.length} rows · total \${total.toLocaleString('fr-FR')}</div>\`;  // render a real table in practice
+  return { html, data: { rows, total }, reset: () => {} };
 } catch (error) {
-  console.error(error);
-  return { html: \`<div class="p-4 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg text-sm">\${error.message}</div>\`, data: {}, reset: () => {} };
+  return { html: \`<div class="p-3 bg-red-50 text-red-700 rounded text-sm">\${error.message}</div>\`, data: {}, reset: () => {} };
 }
+\`\`\`
+
+## B) Answer a targeted question (no table)
+\`\`\`js
+// Locate a value by its STATIC label, then read the DYNAMIC value beside it.
+const line = pdfText.split('\\n').find(l => /N°\\s*de\\s*compte\\s*:/i.test(l));
+const account = line ? splitCols(line)[1].trim() : null;
+return { html: \`<p class="p-3 text-sm">Account: \${account ?? 'not found'}</p>\`, data: { account }, reset: () => {} };
+\`\`\`
+
+## C) Structure check — "is a document the same type as this one?"
+\`\`\`js
+// Build a PORTABLE detector from THIS document's STATIC anchors. The sandbox sees
+// only the current document, so describe the structure in front of you; you cannot
+// enumerate types you have never been shown. Re-run this formula on any OTHER
+// document (no AI) to test if it shares this structure. Multi-type classification
+// = run several such per-type detectors — app-level wiring.
+const anchors = [
+  /Relev[eé] de Portefeuille/i,                   // a title/caption that is static for this type
+  /Code Valeur \\| Libell[eé] \\| Quantit[eé]/i,   // the static column-header line
+  /N°\\s*de\\s*compte\\s*:/i,                        // a field caption
+];
+const matches = anchors.every(re => re.test(pdfText));
+return { html: \`<p class="p-3 text-sm">Same structure: \${matches ? 'yes' : 'no'}</p>\`, data: { matches }, reset: () => {} };
 \`\`\`` : ''
 
   return [role, outputFormat, answerRules, environment, refinementRules, codingRules, apisSection, dataContext, catalogExample, pdfExample, example, mapExample]
