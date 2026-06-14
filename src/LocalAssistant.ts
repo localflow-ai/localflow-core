@@ -101,7 +101,7 @@ If a formula is required, the \`answer\` field must describe the formula's appro
 
   const environment = `\
 # ENVIRONMENT & SCOPE
-The formula runs as the body of an async function. The following globals are injected at runtime:
+Your code IS the body of an async function — write the statements directly and \`return\` from them. Do NOT wrap your code in \`async () => { … }\`, an IIFE, or any function; the outermost statements are already the function body. The following globals are injected at runtime:
 - \`data\`: Array of row objects for the active tab. Each row's keys match the column names listed in ACTIVE DATA CONTEXT below.
 - \`datasets\`: Object containing all open tabs keyed by tab name (filename). Includes the active tab. Example: \`datasets['customers.csv']\` returns the full row array for that tab. Tab names and schemas are listed in ALL OPEN DATASETS below.
 - \`echarts\`: Apache ECharts 5 library. Use it to draw all charts — bar, line, pie, scatter, heatmap, treemap, sunburst, sankey, candlestick, radar, etc. Always call \`echarts.init(document.getElementById(id))\` inside \`requestAnimationFrame\` after the HTML is inserted. In \`reset()\`, call \`echarts.getInstanceByDom(document.getElementById(id))?.dispose()\`.
@@ -332,7 +332,41 @@ try {
 }
 \`\`\`
 
-## B) Answer a targeted question (no table)
+## B) Extract a table whose rows are quantity-led / variable-width
+\`\`\`js
+// Some tables merge QUANTITY + name in the first column and have variable-width
+// rows, e.g. "16'000 VANGUARD TOTAL BOND MARKET ETF | … | 1'002'515 | 14.8 | -1.6".
+// Detect the row by its LEADING NUMBER; read value columns from the END (a fixed
+// index is unreliable when rows differ in width). A non-number label is a section.
+try {
+  if (!/Détail du portefeuille|Quantité Description/i.test(pdfText)) {
+    return { html: '<div class="p-3 bg-amber-50 text-amber-800 rounded text-sm">Unexpected document structure.</div>', data: { error: 'structure check failed' }, reset: () => {} };
+  }
+  const rows = [];
+  let section = '';
+  for (const raw of pdfText.split('\\n')) {
+    const t = raw.trimEnd();
+    if (!t.trim() || t.startsWith('## Page')) continue;
+    const cols = splitCols(t);
+    const m = cols[0].match(/^([\\d'’ .]+?)\\s+(\\D.+)$/);   // leading number (' or space thousands) then name
+    if (m) {
+      const estimation = parseMoney(cols[cols.length - 3]);   // map END offsets from the column header
+      if (isNaN(estimation)) continue;
+      rows.push({ section, qty: parseNum(m[1]), name: m[2].trim(), estimation,
+                  weight: parseNum(cols[cols.length - 2]), unrealized: parseNum(cols[cols.length - 1]) });
+    } else if (cols.length > 1 && cols[0].trim()) {
+      section = cols[0].trim();   // a non-quantity first column is the current section label
+    }
+  }
+  if (!rows.length) throw new Error('No rows — re-check the row pattern and the END offsets');
+  const total = rows.reduce((s, r) => s + (r.estimation || 0), 0);
+  return { html: \`<div class="p-3 text-sm">\${rows.length} rows · \${total.toLocaleString('fr-FR')}</div>\`, data: { rows, total }, reset: () => {} };
+} catch (e) {
+  return { html: \`<div class="p-3 bg-red-50 text-red-700 rounded text-sm">\${e.message}</div>\`, data: {}, reset: () => {} };
+}
+\`\`\`
+
+## C) Answer a targeted question (no table)
 \`\`\`js
 // Locate a value by its STATIC label, then read the DYNAMIC value beside it.
 const line = pdfText.split('\\n').find(l => /N°\\s*de\\s*compte\\s*:/i.test(l));
@@ -340,7 +374,7 @@ const account = line ? splitCols(line)[1].trim() : null;
 return { html: \`<p class="p-3 text-sm">Account: \${account ?? 'not found'}</p>\`, data: { account }, reset: () => {} };
 \`\`\`
 
-## C) Structure check — "is a document the same type as this one?"
+## D) Structure check — "is a document the same type as this one?"
 \`\`\`js
 // Build a PORTABLE detector from THIS document's STATIC anchors. The sandbox sees
 // only the current document, so describe the structure in front of you; you cannot
@@ -547,8 +581,22 @@ function __runFormula() {
     };
     const root = document.getElementById('r');
     try {
-      const fn = new (Object.getPrototypeOf(async function(){}).constructor)('data', 'datasets', 'echarts', 'L', 'console', 'XLSX', 'jsPDF', 'pdfData', 'pdfjsLib', 'pdfText', 'parseMoney', 'parseNum', 'splitCols', ${formulaJson});
-      const result = await fn(data, datasets, typeof echarts !== 'undefined' ? echarts : undefined, typeof L !== 'undefined' ? L : undefined, mock, typeof XLSX !== 'undefined' ? XLSX : undefined, window.jspdf ? window.jspdf.jsPDF : undefined, __pdfData, typeof pdfjsLib !== 'undefined' ? pdfjsLib : undefined, pdfText, parseMoney, parseNum, splitCols);
+      var __AsyncFn = Object.getPrototypeOf(async function(){}).constructor;
+      var __args = ['data', 'datasets', 'echarts', 'L', 'console', 'XLSX', 'jsPDF', 'pdfData', 'pdfjsLib', 'pdfText', 'parseMoney', 'parseNum', 'splitCols'];
+      var __formula = ${formulaJson};
+      var __vals = [data, datasets, typeof echarts !== 'undefined' ? echarts : undefined, typeof L !== 'undefined' ? L : undefined, mock, typeof XLSX !== 'undefined' ? XLSX : undefined, window.jspdf ? window.jspdf.jsPDF : undefined, __pdfData, typeof pdfjsLib !== 'undefined' ? pdfjsLib : undefined, pdfText, parseMoney, parseNum, splitCols];
+      let result = await new __AsyncFn(...__args, __formula)(...__vals);
+      // Tolerate a formula written as a function EXPRESSION instead of a bare body
+      // (e.g. "async () => { ... return {html} }"): used as a body it is discarded
+      // and yields undefined. Re-run it as an expression and resolve the function.
+      if (result === undefined) {
+        try {
+          let maybe = await new __AsyncFn(...__args, 'return (' + __formula + ');')(...__vals);
+          if (typeof maybe === 'function') maybe = await maybe();
+          if (maybe && maybe.html) result = maybe;
+        } catch (__e) { /* not a function expression — keep undefined */ }
+      }
+      if (typeof result === 'function') result = await result();   // formula did "return () => {...}"
       if (result && result.html) {
         root.innerHTML = result.html;
         if (typeof tailwind !== 'undefined' && typeof tailwind.refresh === 'function') tailwind.refresh();
