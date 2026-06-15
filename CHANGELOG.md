@@ -7,6 +7,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Changed
+- Renamed `runFormulaSilently(formula)` → `executeFormulaSilently(formula)` and enriched its return type: it now resolves with `{ data: unknown; logs: string[]; error?: string }` instead of `string[]`. This makes it the documented **headless** counterpart to `executeFormula` — identical hidden-iframe execution, returning the formula's `data` (and console `logs`) directly and emitting no events. _Breaking:_ callers that read the old `string[]` logs must destructure `.logs`.
+
 ## [0.2.0] — 2026-06-10
 
 ### Added

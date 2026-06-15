@@ -232,14 +232,16 @@ assistant.resultContainer = document.getElementById('result')
 Generated formulas are deterministic — you can save them and re-run on any compatible dataset without an additional LLM call.
 
 ```typescript
-// Get the formula from the last response
-const formula = assistant.getLastFormula()
+// Get the formula code from the last response
+const formula = assistant.getLastFormula()   // string | null
 
-// Save it to your catalog...
+// Save it to your catalog as an analysis object...
 saveToCatalog({ formula, title: response.title, description: response.description })
 
-// ...and replay it later
-assistant.executeFormula(savedFormula)
+// ...and replay it later. executeFormula takes the formula *code* (a string),
+// so pass the `.formula` field of your saved analysis object:
+const saved = loadFromCatalog(/* ... */)
+assistant.executeFormula(saved.formula)
 ```
 
 ### 6. Register a semantic analysis-match hook (optional)
@@ -490,16 +492,38 @@ interface AssistantResponse {
 
 ---
 
-##### `executeFormula(formula)`
+##### `executeFormula(formula: string): void`
 
-Renders a formula in the configured `resultContainer`. Creates the sandboxed iframe, applies `sandboxPermissions`, wires up the proxy fetch relay, and emits `formula:done` / `formula:error`. Called automatically by `prompt()` when `resultContainer` is set.
+Renders a formula in the configured `resultContainer`. Takes the formula **code** (a string — e.g. an `AssistantResponse.formula`, or the `.formula` field of a saved analysis object), **not** an analysis object. Returns `void`; the result data is delivered via the `formula:done` event (see [Events](#events)). Creates the sandboxed iframe, applies `sandboxPermissions`, wires up the proxy fetch relay, and emits `formula:done` / `formula:error`. Called automatically by `prompt()` when `resultContainer` is set.
 
 ```typescript
 // Manual execution (e.g. replaying a catalog analysis)
 assistant.executeFormula(savedAnalysis.formula)
 ```
 
-##### `buildSandboxDocument(formula)`
+##### `executeFormulaSilently(formula: string): Promise<{ data: unknown; logs: string[]; error?: string }>`
+
+The **headless** counterpart to `executeFormula`. Runs the formula code in a hidden, off-screen iframe against the current datasets / active dataset — proxying fetch calls and PDF document data exactly like the visible sandbox — but renders **nothing** and emits **no events**. Instead of firing `formula:done` / `formula:error`, it resolves with the result directly:
+
+- `data` — the formula's returned `data` (or `null`)
+- `logs` — captured `console.*` output, prefixed `LOG:` / `WARN:` / `ERROR:`
+- `error` — set when the formula threw or the 30s timeout elapsed; otherwise `undefined`
+
+It **always resolves, never rejects** — a thrown formula is an inspectable result, not an exception. Use it to run a saved analysis like a plain async function and get its raw data with no UI:
+
+```typescript
+const { data, logs, error } = await assistant.executeFormulaSilently(saved.formula)
+if (error) console.warn('Formula failed:', error, logs)
+else use(data)
+```
+
+|  | `executeFormula` | `executeFormulaSilently` |
+|---|:---:|:---:|
+| Renders into `resultContainer` | ✅ | ❌ (hidden iframe) |
+| Emits `formula:done` / `formula:error` | ✅ | ❌ |
+| Returns | `void` | `Promise<{ data, logs, error? }>` |
+
+##### `buildSandboxDocument(formula: string): string`
 
 Lower-level alternative to `resultContainer` / `executeFormula`: returns the full sandbox HTML document for a formula as a string, so you can drive the iframe yourself. Useful when you need fine-grained control over the iframe lifecycle — loading states, tabbed layouts, or rendering into a framework-managed element. You are then responsible for the iframe's `sandbox` attribute (see `DEFAULT_SANDBOX` above).
 
@@ -508,7 +532,7 @@ const { formula } = await assistant.prompt('Break down revenue by region')
 iframe.srcdoc = assistant.buildSandboxDocument(formula)
 ```
 
-##### `destroy()`
+##### `destroy(): void`
 
 Removes the managed iframe and cleans up all event listeners. Call when the assistant is no longer needed.
 

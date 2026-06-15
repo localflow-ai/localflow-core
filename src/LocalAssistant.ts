@@ -880,11 +880,17 @@ export class LocalAssistant {
   }
 
   /**
-   * Run a formula in a hidden off-screen iframe and return its console output.
-   * Handles fetch proxying and PDF document data so the formula behaves identically
-   * to the visible sandbox, but nothing is shown to the user.
+   * Execute a formula in a hidden off-screen iframe and return its result — the
+   * "headless" counterpart to executeFormula. Runs against the current datasets /
+   * active dataset and proxies fetch + PDF document data identically to the visible
+   * sandbox, but renders nothing and emits no events: the result is the resolved
+   * value rather than a `formula:done` / `formula:error` event.
+   *
+   * Always resolves (never rejects): `.data` is the formula's returned data (or
+   * null), `.logs` is the captured console output, and `.error` is set when the
+   * formula threw or the 30s timeout elapsed.
    */
-  runFormulaSilently(formula: string): Promise<string[]> {
+  executeFormulaSilently(formula: string): Promise<{ data: unknown; logs: string[]; error?: string }> {
     return new Promise((resolve) => {
       const logs: string[] = []
       const iframe = document.createElement('iframe')
@@ -892,7 +898,7 @@ export class LocalAssistant {
       for (const perm of this.sandboxPermissions) iframe.sandbox.add(perm)
       iframe.srcdoc = this.buildSandboxDocument(formula)
 
-      const timeout = setTimeout(() => { cleanup(); resolve(logs) }, 30_000)
+      const timeout = setTimeout(() => { cleanup(); resolve({ data: null, logs, error: 'Formula execution timed out after 30s' }) }, 30_000)
 
       const listener = async (e: MessageEvent) => {
         if (e.source !== iframe.contentWindow) return
@@ -900,14 +906,15 @@ export class LocalAssistant {
         if (!d) return
 
         if (d.t === 'done' || d.t === 'error') {
+          let error: string | undefined
           if (d.t === 'error') {
-            const msg = d.m ?? ''
-            logs.push(`ERROR: ${msg}`)
-            window.console.error('[formula]', msg)
+            error = d.m ?? ''
+            logs.push(`ERROR: ${error}`)
+            window.console.error('[formula]', error)
           }
           clearTimeout(timeout)
           cleanup()
-          resolve(logs)
+          resolve({ data: d.t === 'done' ? (d.data ?? null) : null, logs, error })
           return
         }
         if (d.t === 'log' || d.t === 'warn') {
