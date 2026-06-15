@@ -7,6 +7,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-06-15
+
 ### Changed
 - Renamed `runFormulaSilently(formula)` → `executeFormulaSilently(formula)` and enriched its return type: it now resolves with `{ data: unknown; logs: string[]; error?: string }` instead of `string[]`. This makes it the documented **headless** counterpart to `executeFormula` — identical hidden-iframe execution, returning the formula's `data` (and console `logs`) directly and emitting no events. _Breaking:_ callers that read the old `string[]` logs must destructure `.logs`.
 
@@ -25,6 +27,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Runtime-configurable proxy URL, persisted in `localStorage`.
 - Formula self-healing — `formulaHealingRetries` option; JS syntax errors are caught and silently retried before returning to the caller (default: 1).
 
-[Unreleased]: https://github.com/localflow-ai/localflow-core/compare/0.2.0...HEAD
+[Unreleased]: https://github.com/localflow-ai/localflow-core/compare/0.3.0...HEAD
+[0.3.0]: https://github.com/localflow-ai/localflow-core/releases/tag/0.3.0
 [0.2.0]: https://github.com/localflow-ai/localflow-core/releases/tag/0.2.0
 [0.1.5]: https://github.com/localflow-ai/localflow-core/releases/tag/0.1.5
