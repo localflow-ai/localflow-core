@@ -48,13 +48,16 @@ Metadata-first AI makes the constraint explicit: **only metadata crosses the inf
 | | Classical cloud AI | Local-model AI | Metadata-first AI |
 |---|---|---|---|
 | Raw data stays local | ❌ | ✅ | ✅ |
-| Metadata stays local | ❌ | ✅ | ⚠️ cloud / ✅ self-hosted |
-| Computation executes locally | ❌ | ✅ | ✅ |
-| Uses best available models | ✅ | Limited | ✅ |
+| Metadata stays local | ❌ | ✅ | ⚠️ |
+| Uses best available models | ✅ | ⚠️ | ✅ |
 | Compatible with self-hosted LLMs | ✅ | ✅ | ✅ |
+| Decouples inference from execution | ⚠️ | ⚠️ | ✅ |
+| Makes generated code first-class and reusable | ❌ | ❌ | ✅ |
 | Results are deterministic | ❌ | ❌ | ✅ |
 | Re-runs without AI (no tokens/GPU) | ❌ | ❌ | ✅ |
-| Works on large datasets | ✅ | Limited | ✅ |
+| Works on large datasets | ⚠️ | ⚠️ | ✅ |
+
+> **Legend:** ✅ supported · ⚠️ complicated or limited · ❌ impossible
 
 Typical use cases range from **"Talk to your Data"** on sensitive enterprise spreadsheets — where you want natural language querying without exposing values to the model — to large-scale geospatial analysis, document intelligence on confidential PDFs, and any analytical pipeline where deterministic, repeatable results matter.
 
