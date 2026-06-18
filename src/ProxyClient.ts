@@ -80,6 +80,20 @@ export class ProxyClient implements Proxy {
     } catch { return [] }
   }
 
+  /**
+   * Fetch the proxy's public policy (unauthenticated).
+   * `safeMode: true` means the proxy never forwards attachments to the LLM —
+   * the client must not offer a "send to AI" option for files.
+   */
+  async getPublicConfig(): Promise<{ safeMode: boolean; publicSessions?: { enabled: boolean } }> {
+    try {
+      const res = await fetch(`${this.baseUrl}/public/config`)
+      if (!res.ok) return { safeMode: false }
+      const data = await res.json() as { safeMode?: boolean; publicSessions?: { enabled: boolean } }
+      return { safeMode: data.safeMode === true, publicSessions: data.publicSessions }
+    } catch { return { safeMode: false } }
+  }
+
   async getApiConfigs(): Promise<ApiConfig[]> {
     try {
       const res = await fetch(`${this.baseUrl}/common/api-config`, { headers: this._headers() })

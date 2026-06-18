@@ -584,6 +584,8 @@ interface Proxy {
 }
 ```
 
+> **Attachments.** An `LLMMessage` may include `attachments: LLMAttachment[]`, where `LLMAttachment` is `{ name: string; mimeType: string; data: string }` (`data` is base64 without the `data:` prefix). `ProxyClient` forwards them and the proxy maps them into each provider's multimodal format. A proxy in `safeMode` rejects any request carrying attachments — check `getPublicConfig().safeMode` first.
+
 #### `LocalProxy`
 
 Browser-only implementation. No server required — suitable for local development, testing, and demos.
@@ -664,6 +666,7 @@ const proxy = new ProxyClient(baseUrl, token?)
 |--------|---------|-------------|
 | `connect(type, config)` | `Promise<void>` | Authenticate and store the session token. `type` is `'odoo'`, `'salesforce'`, or `'public'`. `config` contains connector-specific credentials. |
 | `getSessionInfo()` | `Promise<unknown>` | Verify the current session. Throws if expired or not authenticated. |
+| `getPublicConfig()` | `Promise<{ safeMode: boolean; publicSessions?: { enabled: boolean } }>` | Read the proxy's public policy (no token needed). `safeMode: true` means the proxy never forwards attachments to the LLM — hide any "send file to AI" option. |
 | `isConnected()` | `boolean` | `true` if a session token is stored. |
 | `proxy.token` | `string \| null` | The current session token — set by `connect()`, readable for persistence. |
 | `proxy.baseUrl` | `string` | The proxy base URL — mutable, can be changed before calling `connect()`. |

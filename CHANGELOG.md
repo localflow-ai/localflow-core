@@ -7,6 +7,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+- `LLMMessage.attachments?: LLMAttachment[]` — messages may now carry files (`{ name, mimeType, data }`, base64 without the `data:` prefix). `ProxyClient.callLLM()` forwards them to the proxy, which maps them into each provider's multimodal format. New exported type `LLMAttachment`.
+- `ProxyClient.getPublicConfig()` — reads the proxy's public policy (unauthenticated), notably `safeMode`. When `safeMode` is true the proxy refuses to forward attachments, so clients should hide any "send file to AI" affordance.
+
 ## [0.3.0] — 2026-06-15
 
 ### Changed

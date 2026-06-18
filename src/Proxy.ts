@@ -3,9 +3,27 @@ import type { ApiConfig, CrmObjectType } from './types'
 /** API protocol used to reach the LLM. 'openai' covers any OpenAI-compatible endpoint. */
 export type LLMProtocol = 'gemini' | 'openai' | 'anthropic'
 
+/**
+ * A binary attachment (image, PDF, …) sent alongside a message.
+ * Only used by the "send to AI" path — never produced in safe mode.
+ */
+export interface LLMAttachment {
+  /** Original file name (for display / provider filename hints). */
+  name: string
+  /** MIME type, e.g. 'image/png' or 'application/pdf'. */
+  mimeType: string
+  /** Base64-encoded file contents, WITHOUT the `data:` URI prefix. */
+  data: string
+}
+
 export interface LLMMessage {
   role: 'user' | 'assistant'
   content: string
+  /**
+   * Files attached to this message. The proxy maps them into each provider's
+   * multimodal format. Rejected with HTTP 403 when the proxy runs in safe mode.
+   */
+  attachments?: LLMAttachment[]
 }
 
 /** What the client sends to the proxy for an LLM call. */
