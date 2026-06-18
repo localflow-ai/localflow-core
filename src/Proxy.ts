@@ -68,6 +68,21 @@ export interface LLMResponse {
   thoughts?: string
 }
 
+/** Proxy-level public policy, from `GET /public/config` (no auth required). */
+export interface PublicConfig {
+  /** When true, the proxy never forwards attachments to the LLM. */
+  safeMode: boolean
+  publicSessions?: {
+    enabled: boolean
+    rateLimits?: {
+      /** Max AI (genai) requests per IP per day for public/guest sessions. */
+      genaiPerIpPerDay?: number
+      /** Max API-proxy requests per IP per day for public/guest sessions. */
+      apiPerIpPerDay?: number
+    }
+  }
+}
+
 /** Model descriptor returned by getAvailableLLMs() — no keys or internal URLs. */
 export interface LLMModelInfo {
   /** Stable identifier used in LLMRequest.modelId. */

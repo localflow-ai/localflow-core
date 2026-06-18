@@ -1,5 +1,5 @@
 import type { ApiConfig, CrmObjectType } from './types'
-import type { Proxy, LLMRequest, LLMResponse, LLMModelInfo } from './Proxy'
+import type { Proxy, LLMRequest, LLMResponse, LLMModelInfo, PublicConfig } from './Proxy'
 
 /**
  * LocalFlow proxy client — delegates all requests to a running LocalFlow proxy server.
@@ -85,11 +85,11 @@ export class ProxyClient implements Proxy {
    * `safeMode: true` means the proxy never forwards attachments to the LLM —
    * the client must not offer a "send to AI" option for files.
    */
-  async getPublicConfig(): Promise<{ safeMode: boolean; publicSessions?: { enabled: boolean } }> {
+  async getPublicConfig(): Promise<PublicConfig> {
     try {
       const res = await fetch(`${this.baseUrl}/public/config`)
       if (!res.ok) return { safeMode: false }
-      const data = await res.json() as { safeMode?: boolean; publicSessions?: { enabled: boolean } }
+      const data = await res.json() as Partial<PublicConfig>
       return { safeMode: data.safeMode === true, publicSessions: data.publicSessions }
     } catch { return { safeMode: false } }
   }
