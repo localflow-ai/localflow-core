@@ -8,8 +8,13 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 ## [Unreleased]
 
 ### Added
+- `LocalAssistant.sandboxTheme` getter/setter — lets the host change the sandbox's Tailwind theme after construction (e.g. to match the app's current skin/dark mode before building a result). Previously settable only via the constructor.
+- `ApiConfig.description?: string` — a human-readable, end-user-facing description for an external API (the proxy already returns it via `GET /common/api-config`). Distinct from `prompt`, which is the LLM-facing instruction.
 - `LLMMessage.attachments?: LLMAttachment[]` — messages may now carry files (`{ name, mimeType, data }`, base64 without the `data:` prefix). `ProxyClient.callLLM()` forwards them to the proxy, which maps them into each provider's multimodal format. New exported type `LLMAttachment`.
 - `ProxyClient.getPublicConfig()` — reads the proxy's public policy (unauthenticated), notably `safeMode`. When `safeMode` is true the proxy refuses to forward attachments, so clients should hide any "send file to AI" affordance.
+
+### Fixed
+- Sandbox helpers (`parseMoney`/`parseNum`/`splitCols`) are now bound to canonical `var` names when injected into the sandbox document. Previously a production minifier could rename the source functions, leaving the sandbox globals undefined and breaking formulas that call them (`"parseMoney is not defined"` at result-render time). Dev builds were unaffected because they aren't minified.
 
 ## [0.3.0] — 2026-06-15
 

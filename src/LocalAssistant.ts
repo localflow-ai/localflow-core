@@ -566,9 +566,11 @@ window.addEventListener('message', function(e) {
 // Column/number parsing helpers — single source of truth in ./sandboxHelpers.
 // Injected as real source via toString() so the sandbox gets correct regex
 // escapes (template-literal cooking would strip lone backslashes).
-${parseMoney.toString()}
-${parseNum.toString()}
-${splitCols.toString()}
+// Bound to canonical var names so a production minifier renaming the source
+// function (e.g. parseMoney → t) doesn't leave the sandbox global undefined.
+var parseMoney = ${parseMoney.toString()};
+var parseNum = ${parseNum.toString()};
+var splitCols = ${splitCols.toString()};
 function __runFormula() {
   (async () => {
     const data = ${dataJson};
@@ -685,6 +687,10 @@ export class LocalAssistant {
 
   get sandboxPermissions(): string[] { return this._config.sandboxPermissions ?? DEFAULT_SANDBOX_PERMISSIONS }
   set sandboxPermissions(v: string[]) { this._config.sandboxPermissions = v }
+
+  /** Tailwind theme injected into the sandbox document; lets the host match the app's palette. */
+  get sandboxTheme(): Record<string, unknown> | undefined { return this._config.sandboxTheme }
+  set sandboxTheme(v: Record<string, unknown> | undefined) { this._config.sandboxTheme = v }
 
   // -------------------------------------------------------------------------
   // Dataset management

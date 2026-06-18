@@ -112,7 +112,10 @@ export interface ApiConfig {
   id: string
   name: string
   topic?: string
+  /** Human-readable description for end users (distinct from `prompt`). */
+  description?: string
   baseUrl: string | string[]
+  /** Instruction sent to the LLM about this API — not for display. */
   prompt?: string
   force?: boolean
   prepaid?: boolean
