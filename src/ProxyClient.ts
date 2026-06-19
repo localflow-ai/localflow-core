@@ -1,5 +1,6 @@
 import type { ApiConfig, CrmObjectType } from './types'
 import type { Proxy, LLMRequest, LLMResponse, LLMModelInfo, PublicConfig } from './Proxy'
+import { DENY_ALL, ALLOW_ALL, type EffectivePermissions } from './permissions'
 
 /**
  * LocalFlow proxy client — delegates all requests to a running LocalFlow proxy server.
@@ -92,6 +93,21 @@ export class ProxyClient implements Proxy {
       const data = await res.json() as Partial<PublicConfig>
       return { safeMode: data.safeMode === true, publicSessions: data.publicSessions }
     } catch { return { safeMode: false } }
+  }
+
+  /**
+   * The effective authorization set for the current session (resolved server-side).
+   * A proxy that doesn't implement permissions (404) is treated as unrestricted
+   * (ALLOW_ALL) — matching its own "no permissions.json" behavior. Other errors
+   * fail closed (DENY_ALL). Client gating is UX only; the proxy is the enforcer.
+   */
+  async getPermissions(): Promise<EffectivePermissions> {
+    try {
+      const res = await fetch(`${this.baseUrl}/permissions`, { headers: this._headers() })
+      if (res.status === 404) return ALLOW_ALL
+      if (!res.ok) return DENY_ALL
+      return await res.json() as EffectivePermissions
+    } catch { return DENY_ALL }
   }
 
   async getApiConfigs(): Promise<ApiConfig[]> {

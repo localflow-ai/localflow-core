@@ -8,6 +8,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 ## [Unreleased]
 
 ### Added
+- **Authorization vocabulary** — exported `Capability` / `PermissionLimits` / `EffectivePermissions` types, `DENY_ALL` / `ALLOW_ALL`, and helpers `can()` / `isModelAllowed()` / `isApiAllowed()`. `ProxyClient.getPermissions()` fetches the proxy's resolved set from `GET /permissions`; a proxy without the endpoint (404) is treated as unrestricted (`ALLOW_ALL`, legacy), other errors fail closed (`DENY_ALL`). Client gating is UX only — the proxy enforces. Single capability vocabulary shared with the proxy; see `localflow-proxy/docs/permissions.md`.
 - `LocalAssistant.sandboxTheme` getter/setter — lets the host change the sandbox's Tailwind theme after construction (e.g. to match the app's current skin/dark mode before building a result). Previously settable only via the constructor.
 - `ApiConfig.description?: string` — a human-readable, end-user-facing description for an external API (the proxy already returns it via `GET /common/api-config`). Distinct from `prompt`, which is the LLM-facing instruction.
 - `LLMMessage.attachments?: LLMAttachment[]` — messages may now carry files (`{ name, mimeType, data }`, base64 without the `data:` prefix). `ProxyClient.callLLM()` forwards them to the proxy, which maps them into each provider's multimodal format. New exported type `LLMAttachment`.
