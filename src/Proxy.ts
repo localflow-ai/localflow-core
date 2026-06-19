@@ -20,6 +20,13 @@ export interface LLMMessage {
   role: 'user' | 'assistant'
   content: string
   /**
+   * Machine-generated preamble for this turn (e.g. a previous run's execution
+   * trace). The proxy prepends it to `content` when forwarding to the model, but
+   * does NOT count it against the per-message prompt-char limit — that limit is
+   * meant to bound the user's own input (`content`), not generated context.
+   */
+  context?: string
+  /**
    * Files attached to this message. The proxy maps them into each provider's
    * multimodal format. Rejected with HTTP 403 when the proxy runs in safe mode.
    */

@@ -46,4 +46,27 @@ describe('PDF prompt budgeting', () => {
     expect(req.messages.at(-1)!.content).toBe('Quelle est la valorisation totale ?')
     expect(msgChars).toBeLessThan(1000)
   })
+
+  it('sends the previous run trace as message context, not in content or system', async () => {
+    const { proxy, get } = captureRequest()
+    const a = new LocalAssistant({ proxy, llm: { modelId: 'm', protocol: 'gemini' } as never })
+    a.addPdfDataset('statement.pdf', new ArrayBuffer(8), '## Page 1\ntext', 1)
+    a.setActiveDataset('statement.pdf')
+
+    // A large machine-generated trace from the previous formula run.
+    const logs = Array.from({ length: 80 }, (_, i) => `line ${i}: ${'x'.repeat(60)}`)
+    a.recordFormulaResult({ rows: [1, 2, 3] }, logs)
+
+    await expect(a.prompt('total?')).rejects.toThrow('STOP')
+
+    const last = get()!.messages.at(-1)!
+    // The user's typed text is the only thing maxPromptChars would count…
+    expect(last.content).toBe('total?')
+    // …the trace rides in `context` (forwarded but uncounted)…
+    expect(last.context).toBeTruthy()
+    expect(last.context).toContain('line 10:')
+    // …never leaking into content or the (cacheable) system prompt.
+    expect(last.content).not.toContain('line 10:')
+    expect(get()!.system).not.toContain('line 10:')
+  })
 })

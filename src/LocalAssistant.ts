@@ -1157,11 +1157,13 @@ export class LocalAssistant {
       this._lastPdfPrompted = active.name
     }
 
-    // Prepend execution feedback from the previous formula run
-    if (this._pendingFormulaFeedback) {
-      llmMessage = `${this._pendingFormulaFeedback}\n\n[User follow-up]\n${llmMessage}`
-      this._pendingFormulaFeedback = null
-    }
+    // The previous run's execution trace travels as message `context`, not inside
+    // `content`: it's machine-generated (and can be several KB), so the proxy
+    // forwards it to the model but does not charge it against the per-message
+    // prompt-char limit. It stays at the conversation tail, leaving the cacheable
+    // system prompt untouched.
+    const feedback = this._pendingFormulaFeedback
+    this._pendingFormulaFeedback = null
 
     // Notify before the network call so the UI can update immediately
     {
@@ -1180,7 +1182,7 @@ export class LocalAssistant {
       system: systemPrompt,
       messages: [
         ...this._turnsAsMessages(this._history),
-        { role: 'user', content: llmMessage },
+        { role: 'user', content: llmMessage, ...(feedback ? { context: feedback } : {}) },
       ],
       options: { thinking: true, json: true, temperature: 0.5 },
     })

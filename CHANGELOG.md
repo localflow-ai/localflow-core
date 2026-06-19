@@ -7,6 +7,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+- `LLMMessage.context?: string` — machine-generated preamble for a turn (e.g. the previous run's execution trace). `callLLM()` forwards it to the model prepended to `content`, but the proxy excludes it from the per-message prompt-char limit (`content` is the user's own input). Used to carry the formula-execution trace at the conversation tail.
+
+### Fixed
+- Follow-up prompts after a formula run no longer trip the proxy's `maxPromptChars`. The previous run's execution trace (console output + data preview, often several KB) was prepended to the next user message and counted as the user's input, so self-heal / follow-up turns returned `413`. The trace now travels as message `context` (forwarded, uncounted) and stays at the conversation tail — the cacheable system prompt (which carries the PDF text) is left untouched.
+
 ## [0.4.0] — 2026-06-19
 
 ### Added

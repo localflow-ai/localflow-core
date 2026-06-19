@@ -586,6 +586,8 @@ interface Proxy {
 
 > **Attachments.** An `LLMMessage` may include `attachments: LLMAttachment[]`, where `LLMAttachment` is `{ name: string; mimeType: string; data: string }` (`data` is base64 without the `data:` prefix). `ProxyClient` forwards them and the proxy maps them into each provider's multimodal format. A proxy in `safeMode` rejects any request carrying attachments — check `getPublicConfig().safeMode` first.
 
+> **Message context.** An `LLMMessage` may also carry `context?: string` — machine-generated preamble for the turn (e.g. the previous formula run's execution trace). The proxy prepends it to `content` when forwarding to the model but excludes it from the per-message prompt-char limit, which bounds the user's own input (`content`) only. `LocalAssistant` sets this internally; callers rarely need it.
+
 #### `LocalProxy`
 
 Browser-only implementation. No server required — suitable for local development, testing, and demos.
