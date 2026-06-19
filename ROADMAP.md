@@ -3,6 +3,7 @@
 Directions under consideration for `@localflow/core` — not commitments or a release schedule.
 
 - **Additional LLM backends** — Mistral, Ollama.
+- **Permissions client** — exported capability/limit key enum + `EffectivePermissions` type, and `ProxyClient.getPermissions()` over the proxy's `GET /permissions`. Apps gate UI from it; the proxy enforces. See `localflow-proxy/docs/permissions.md`.
 - **Streaming LLM client** — a `callLLMStream()` (and matching `Proxy` method) that consumes the proxy's streaming `/common/genai` (SSE) and yields text deltas, for incremental rendering. Pairs with the proxy-side streaming endpoint; most useful for plain chat (the metadata-first `prompt()` needs the full JSON before it can run the formula).
 - **Interactive formula results** — action buttons returned by formulas.
 - **Async / streaming formula execution.**
