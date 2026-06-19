@@ -7,6 +7,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-06-19
+
 ### Added
 - `LLMMessage.context?: string` — machine-generated preamble for a turn (e.g. the previous run's execution trace). `callLLM()` forwards it to the model prepended to `content`, but the proxy excludes it from the per-message prompt-char limit (`content` is the user's own input). Used to carry the formula-execution trace at the conversation tail.
 
@@ -46,7 +48,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Runtime-configurable proxy URL, persisted in `localStorage`.
 - Formula self-healing — `formulaHealingRetries` option; JS syntax errors are caught and silently retried before returning to the caller (default: 1).
 
-[Unreleased]: https://github.com/localflow-ai/localflow-core/compare/0.4.0...HEAD
+[Unreleased]: https://github.com/localflow-ai/localflow-core/compare/0.4.1...HEAD
+[0.4.1]: https://github.com/localflow-ai/localflow-core/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/localflow-ai/localflow-core/compare/0.3.0...0.4.0
 [0.3.0]: https://github.com/localflow-ai/localflow-core/releases/tag/0.3.0
 [0.2.0]: https://github.com/localflow-ai/localflow-core/releases/tag/0.2.0
