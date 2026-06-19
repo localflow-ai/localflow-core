@@ -61,7 +61,7 @@ function buildSystemPromptFn(
   activatedApis: ActivatedApi[],
   activeDatasetType: 'table' | 'pdf',
   activeDatasetName: string | null,
-  _pdfExtractedText: string,
+  pdfExtractedText: string,
   pdfPageCount: number,
   exampleAnalysis?: AnalysisSuggestion | null,
 ): string {
@@ -164,7 +164,7 @@ Do NOT use \`window\`, \`import\`, or \`require\`. Do NOT call APIs not listed i
   const dataContext = activeDatasetType === 'pdf' ? `\
 # ACTIVE DATASET IS A PDF DOCUMENT
 Tab: "${activeDatasetName ?? ''}" (${pdfPageCount} page${pdfPageCount !== 1 ? 's' : ''})
-The full document text is included in the conversation — use it to understand the content and structure.
+The full document text is included below in this system prompt (section "PDF DOCUMENT TEXT") — use it to understand the content and structure.
 In formulas: use \`pdfText\` (pre-extracted string) split by '\\n' to process line by line. Pages are separated by "## Page N" headers.
 Do NOT use \`data\` (empty). \`pdfData\` + \`pdfjsLib\` are available for raw positional extraction if needed.
 
@@ -390,7 +390,27 @@ const matches = anchors.every(re => re.test(pdfText));
 return { html: \`<p class="p-3 text-sm">Same structure: \${matches ? 'yes' : 'no'}</p>\`, data: { matches }, reset: () => {} };
 \`\`\`` : ''
 
-  return [role, outputFormat, answerRules, environment, refinementRules, codingRules, apisSection, dataContext, catalogExample, pdfExample, example, mapExample]
+  // The PDF's extracted text travels in the system prompt, not the user message.
+  // It is bounded by the upload-size limit at extraction time (and truncated below
+  // for the model's context window), so it must NOT count against the per-message
+  // prompt-char limit that guards user-typed input.
+  const PDF_MAX_CHARS = 400_000  // ~100K tokens — within the model context window
+  const pdfDocument = activeDatasetType === 'pdf' && pdfExtractedText
+    ? `# PDF DOCUMENT TEXT — "${activeDatasetName ?? ''}"
+This is the active PDF's extracted text — the same string exposed as \`pdfText\` in formulas (columns separated by " | ", pages by "## Page N" headers). Read it to understand the structure; never hardcode any dynamic value (amount, name, date) read from it.
+
+[Mandatory] When you write the formula, add a console.log for every line in both passes:
+- Pass 1: log the raw line and the type you assign it.
+- Pass 2: log the type, the cols array, and for every amount column log both the raw string and the parseMoney result.
+
+----- BEGIN DOCUMENT -----
+${pdfExtractedText.length > PDF_MAX_CHARS
+  ? pdfExtractedText.slice(0, PDF_MAX_CHARS) + '\n\n[... document truncated due to length ...]'
+  : pdfExtractedText}
+----- END DOCUMENT -----`
+    : ''
+
+  return [role, outputFormat, answerRules, environment, refinementRules, codingRules, apisSection, dataContext, catalogExample, pdfExample, example, mapExample, pdfDocument]
     .filter(Boolean)
     .join('\n\n')
 }
@@ -646,6 +666,7 @@ export class LocalAssistant {
   private _history: ConversationTurn[] = []
   private _matchHook: AnalysisMatchHook | null = null
   private _lastSystemPrompt = ''
+  private _lastPdfPrompted: string | null = null  // active PDF name of the current history (reset on switch)
   private _pendingFormulaFeedback: string | null = null
   private _listeners: Map<string, Set<Function>> = new Map()
   private _iframe?: HTMLIFrameElement
@@ -1123,34 +1144,17 @@ export class LocalAssistant {
     )
     this._lastSystemPrompt = systemPrompt
 
-    // For PDF datasets: inject the full extracted text into the first user message so
-    // the LLM has complete document context. Reset history when switching to a different PDF.
+    // The PDF document text rides in the system prompt (buildSystemPromptFn), so it
+    // is bounded by the upload-size limit — never the per-message prompt-char limit —
+    // and the user message stays just the question. Reset history when switching to a
+    // different PDF so prior Q&A about another document doesn't leak in.
     let llmMessage = userMessage
     if (active?.type === 'pdf') {
-      const pdfText = this.getActivePdfExtractedText()
-      const differentPdfInHistory = this._history.some(
-        t => t.role === 'user' &&
-          t.parts[0]?.text?.startsWith('[PDF:') &&
-          !t.parts[0]?.text?.startsWith(`[PDF: "${active.name}"`)
-      )
-      if (differentPdfInHistory) {
+      if (this._lastPdfPrompted && this._lastPdfPrompted !== active.name && this._history.length > 0) {
         this._history = []
         this._emit('history:reset')
       }
-      const alreadyInjected = this._history.some(
-        t => t.role === 'user' && t.parts[0]?.text?.includes(`[PDF: "${active.name}"`)
-      )
-      if (pdfText && !alreadyInjected) {
-        const MAX_CHARS = 400_000  // ~100K tokens — within Gemini's context window
-        const truncated = pdfText.length > MAX_CHARS
-          ? pdfText.slice(0, MAX_CHARS) + '\n\n[... document truncated due to length ...]'
-          : pdfText
-        const loggingInstruction =
-          '\n\n[Mandatory] Add a console.log for every line in both passes:\n' +
-          '- Pass 1: log the raw line and the type you assign it.\n' +
-          '- Pass 2: log the type, the cols array, and for every amount column log both the raw string and the parseMoney result.'
-        llmMessage = `[PDF: "${active.name}" — ${this.getActivePdfPageCount()} pages]\n\n${truncated}\n\n[User question]\n${userMessage}${loggingInstruction}`
-      }
+      this._lastPdfPrompted = active.name
     }
 
     // Prepend execution feedback from the previous formula run
