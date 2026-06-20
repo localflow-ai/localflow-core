@@ -301,6 +301,7 @@ new LocalAssistant(config: LocalAssistantConfig)
 interface LocalAssistantConfig {
   proxy: Proxy             // any Proxy implementation — LocalProxy or ProxyClient
   llm: LLMConfig           // LLM backend configuration
+  appContext?: string      // app domain context prepended to the system prompt (e.g. what the data represents)
   darkMode?: boolean       // passed to the formula sandbox (default: false)
   apiPreferences?: ApiPreference[]    // previously persisted prefs (from 'prefs:change')
   resultContainer?: ResultContainer   // where to render formula results

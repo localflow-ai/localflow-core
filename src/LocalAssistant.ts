@@ -1131,7 +1131,7 @@ export class LocalAssistant {
 
   async prompt(userMessage: string, opts?: { exampleAnalysis?: AnalysisSuggestion | null }): Promise<AssistantResponse> {
     const active = this.getActiveDataset()
-    const systemPrompt = buildSystemPromptFn(
+    let systemPrompt = buildSystemPromptFn(
       active?.columns ?? [],
       active?.rows ?? [],
       this.getDatasets(),
@@ -1142,6 +1142,10 @@ export class LocalAssistant {
       this.getActivePdfPageCount(),
       opts?.exampleAnalysis ?? null,
     )
+    // App-supplied domain context goes first so it frames everything below.
+    if (this._config.appContext) {
+      systemPrompt = `# CONTEXT\n${this._config.appContext}\n\n${systemPrompt}`
+    }
     this._lastSystemPrompt = systemPrompt
 
     // The PDF document text rides in the system prompt (buildSystemPromptFn), so it

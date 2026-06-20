@@ -47,6 +47,14 @@ export interface LocalAssistantConfig {
   llm: LLMConfig
   darkMode?: boolean
   /**
+   * App-specific domain context, prepended to the system prompt on every turn.
+   * Tells the assistant what the data represents and how to read the user's
+   * wording (e.g. "the active 'events' dataset is this proxy's request log;
+   * 'events' always means log entries, never calendar events"). Use it to keep a
+   * specialised, embedded assistant from mis-interpreting generic terms.
+   */
+  appContext?: string
+  /**
    * Previously persisted API preferences (enabled flags + encrypted BYOK keys).
    * Pass the value you stored from the 'prefs:change' event to restore state across sessions.
    */

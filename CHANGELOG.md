@@ -7,6 +7,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+- `LocalAssistantConfig.appContext?: string` — app-supplied domain context, prepended to the system prompt on every turn (e.g. "the active 'events' dataset is this proxy's request log; 'events' always means log entries"). Lets a specialised/embedded assistant interpret the user's wording in its domain instead of mis-reading generic terms.
+
 ## [0.4.1] — 2026-06-19
 
 ### Added

@@ -70,3 +70,24 @@ describe('PDF prompt budgeting', () => {
     expect(get()!.system).not.toContain('line 10:')
   })
 })
+
+describe('appContext', () => {
+  it('prepends app-supplied domain context to the system prompt', async () => {
+    const { proxy, get } = captureRequest()
+    const a = new LocalAssistant({
+      proxy,
+      llm: { modelId: 'm' } as never,
+      appContext: 'The "events" dataset is this proxy\'s request log, not calendar events.',
+    })
+    a.addDataset('events', [{ time: '2026-06-20', kind: 'genai', status: 200 }])
+
+    await expect(a.prompt('how many events today?')).rejects.toThrow('STOP')
+
+    const sys = get()!.system
+    // Context comes first so it frames everything below…
+    expect(sys.startsWith('# CONTEXT')).toBe(true)
+    expect(sys).toContain("this proxy's request log")
+    // …without displacing the active dataset's schema.
+    expect(sys).toContain('"events"')
+  })
+})
