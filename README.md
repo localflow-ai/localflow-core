@@ -1,4 +1,4 @@
-# LocalFlow Core — Metadata-first AI Framework
+# LocalFlow Core — Local-first data analysis with AI
 
 [![npm](https://img.shields.io/npm/v/@localflow/core)](https://www.npmjs.com/package/@localflow/core)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
@@ -32,7 +32,7 @@
 
 ## Overview
 
-LocalFlow is a **metadata-first AI framework**: only metadata about your data — column names, statistical samples, document structure — ever reaches the LLM, which acts as a **code generator**. It writes analysis code that runs locally, in a sandboxed browser iframe, on your real data. Raw data never crosses the inference boundary, results are deterministic (computed by code, not inferred), and a generated analysis can be saved and re-run on any compatible dataset with no further AI call.
+LocalFlow brings **local-first data analysis to AI**: your data stays on the device, and only metadata about it — column names, statistical samples, document structure — ever reaches the LLM. This is the **metadata-first protocol**: the model acts as a **code generator**, writing analysis code that runs locally, in a sandboxed browser iframe, on your real data. Raw data never crosses the inference boundary, results are deterministic (computed by code, not inferred), and a generated analysis can be saved and re-run on any compatible dataset with no further AI call.
 
 > 📖 **Full explanation** of the metadata-first protocol — the metadata boundary, two-step execution, key properties, limitations and how it compares to classical cloud and local-model AI — is on the website: **[localflow.fr/metadata-first-ai](https://localflow.fr/metadata-first-ai)**.
 
