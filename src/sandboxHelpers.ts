@@ -20,7 +20,7 @@ export function parseMoney(s: unknown): number {
     const sign = str.charAt(0) === '-' ? -1 : 1;
     const clean = str
       .replace(/^[+-]/, '')                                       // leading sign
-      .replace(/[€$£₹¥*†‡°]/g, '')                                 // currency symbols anywhere
+      .replace(/[€$£₹¥¤*†‡°]/g, '')                                 // currency symbols anywhere (¤ = euro mis-encoded as Latin-1 0xA4)
       .replace(/\s*[A-Za-z]{1,4}\.?\s*$/, '')                     // trailing unit/currency code (EUR, CHF, UNT, F.)
       .trim();
     if (/[A-Za-z]/.test(clean)) return NaN;                       // residual letters → description/code, not money

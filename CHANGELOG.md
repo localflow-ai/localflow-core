@@ -10,6 +10,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 ### Added
 - `LocalAssistantConfig.appContext?: string` — app-supplied domain context, prepended to the system prompt on every turn (e.g. "the active 'events' dataset is this proxy's request log; 'events' always means log entries"). Lets a specialised/embedded assistant interpret the user's wording in its domain instead of mis-reading generic terms.
 
+### Fixed
+- `parseMoney` now also strips the generic currency sign `¤` (U+00A4), alongside `€`/`$`/`£`/`¥`/`₹`. Some PDFs — notably French/euro statements — draw `€` at the Latin-1 `0xA4` slot with no `ToUnicode` map, so extraction faithfully yields `¤`; `parseMoney` previously treated such amounts as `NaN`, silently dropping every monetary cell (an entire positions table could extract to zero rows while quantities still parsed). Purely additive — amounts that already parsed are unchanged.
+
 ## [0.4.1] — 2026-06-19
 
 ### Added

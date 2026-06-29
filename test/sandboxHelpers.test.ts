@@ -52,6 +52,8 @@ describe('parseMoney', () => {
     ['1 234,56 EUR', 1234.56],     // trailing currency code
     ['1 234,56 CHF', 1234.56],
     ['1 234,56 €', 1234.56],       // currency symbol
+    ['31,34 ¤', 31.34],            // euro mis-encoded as the generic currency sign ¤ (Latin-1 0xA4)
+    ['3 995,92 ¤', 3995.92],
     ["6'751'498", 6751498],        // Swiss apostrophe
     ['5,23', 5.23],
     ['0,00', 0],
