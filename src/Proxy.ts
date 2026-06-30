@@ -99,6 +99,12 @@ export interface LLMModelInfo {
   protocol: LLMProtocol
   model: string
   isDefault?: boolean
+  /**
+   * Capability tier, from `llm-configs.json`. Lets the client pick prompt
+   * verbosity: 'small' = local/edge (leaner prompt); 'medium'/'large' (the
+   * default when unset) = full prompt.
+   */
+  size?: 'small' | 'medium' | 'large'
 }
 
 /**

@@ -9,9 +9,14 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 - `LocalAssistantConfig.appContext?: string` — app-supplied domain context, prepended to the system prompt on every turn (e.g. "the active 'events' dataset is this proxy's request log; 'events' always means log entries"). Lets a specialised/embedded assistant interpret the user's wording in its domain instead of mis-reading generic terms.
+- `LocalAssistantConfig.modelSize?: 'small' | 'medium' | 'large'` and `LocalAssistant.modelSize` getter/setter — capability tier of the active model. `'small'` switches `prompt()` to a lean, **code-only** protocol for local/edge models (e.g. Qwen-Coder via Ollama): a compact system prompt, plain-text output parsed directly as the formula, code-only conversation history, and no self-heal retries. `'medium'`/`'large'` (default when unset) keep the full JSON protocol. Pairs with `LLMModelInfo.size`.
+- `LLMModelInfo.size?: 'small' | 'medium' | 'large'` — capability tier reported by `getAvailableLLMs()` (sourced from the proxy's `llm-configs.json`), so the client can pick prompt verbosity per model.
+- `math` sandbox global — formulas can now use [math.js](https://mathjs.org) (as `math`) for statistics, linear algebra and regression (e.g. least-squares polynomial fitting via `math.lusolve`), alongside the existing `echarts`/`L`/`turf`/`XLSX`/`jsPDF` globals.
 
 ### Fixed
 - `parseMoney` now also strips the generic currency sign `¤` (U+00A4), alongside `€`/`$`/`£`/`¥`/`₹`. Some PDFs — notably French/euro statements — draw `€` at the Latin-1 `0xA4` slot with no `ToUnicode` map, so extraction faithfully yields `¤`; `parseMoney` previously treated such amounts as `NaN`, silently dropping every monetary cell (an entire positions table could extract to zero rows while quantities still parsed). Purely additive — amounts that already parsed are unchanged.
+- Sandbox `console.*` now renders `Error` objects as `Name: message` instead of `{}` — previously `JSON.stringify(err)` dropped the message (Error properties are non-enumerable), so a formula's runtime error surfaced in the logs as an empty object.
+- Sandbox now tolerates a formula that returns a bare HTML string (wrapped as `{ html, data: null, reset }`) — common output from small/local models.
 
 ## [0.4.1] — 2026-06-19
 

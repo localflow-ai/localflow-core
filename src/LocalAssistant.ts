@@ -64,6 +64,7 @@ function buildSystemPromptFn(
   pdfExtractedText: string,
   pdfPageCount: number,
   exampleAnalysis?: AnalysisSuggestion | null,
+  size: 'small' | 'medium' | 'large' = 'large',
 ): string {
   const role = `\
 # ROLE
@@ -107,6 +108,7 @@ Your code IS the body of an async function — write the statements directly and
 - \`echarts\`: Apache ECharts 5 library. Use it to draw all charts — bar, line, pie, scatter, heatmap, treemap, sunburst, sankey, candlestick, radar, etc. Always call \`echarts.init(document.getElementById(id))\` inside \`requestAnimationFrame\` after the HTML is inserted. In \`reset()\`, call \`echarts.getInstanceByDom(document.getElementById(id))?.dispose()\`.
 - \`L\`: Leaflet 1.9.4 — use it to create interactive OSM maps. Always initialise the map inside \`requestAnimationFrame\` after the HTML is inserted. Always call \`map.remove()\` in \`reset()\`.
 - \`turf\`: Turf.js 6 — geospatial analysis library. Use it for spatial operations on GeoJSON data: \`turf.buffer\`, \`turf.distance\`, \`turf.area\`, \`turf.bbox\`, \`turf.centroid\`, \`turf.intersect\`, \`turf.union\`, \`turf.within\`, \`turf.nearestPoint\`, etc. Combine with Leaflet to render results on an OSM map.
+- \`math\`: math.js — full maths/stats library (matrices & linear algebra, statistics, expression evaluation, units). Prefer it for statistics, curve fitting / regression (least-squares via \`math.lusolve\`) and numeric work rather than hand-rolling formulas or hardcoding coefficients.
 - \`console\`: Mocked console. Use \`console.log/info/warn/error\` for debugging. \`console.error\` signals a failure to the monitoring system.
 - \`fetch\`: Proxied fetch — all requests are routed through the proxy. Only APIs listed in AVAILABLE EXTERNAL APIs may be called. Authentication and throttling are handled automatically.
 - \`XLSX\`: xlsx-js-style library. Use it **only when the user explicitly asks for an Excel file**. Full cell styling is supported via the \`.s\` property (font, fill, border, alignment, number format). To trigger a download: \`XLSX.writeFile(wb, 'filename.xlsx')\`.
@@ -410,6 +412,47 @@ ${pdfExtractedText.length > PDF_MAX_CHARS
 ----- END DOCUMENT -----`
     : ''
 
+  // Small (local/edge) models get a brand-new, code-only prompt: they're weak at
+  // emitting the full JSON contract (they invent keys / deflect) but strong at
+  // writing code, so we ask for ONLY the JS snippet and let LocalAssistant.prompt()
+  // wrap it into the response. 'medium'/'large' keep the full prompt below, so
+  // existing hosted-model output is byte-identical.
+  if (size === 'small') {
+    const smallPrompt = `You write ONE JavaScript snippet that analyses data already loaded locally in the browser (no data leaves the browser). Your code is the body of an async function — write statements directly and \`return\`; do not wrap it in a function.
+
+${dataContext}
+
+GLOBALS (already available — the data IS loaded, never say you can't access it, just use \`data\`):
+- \`data\`: array of row objects for the active tab (keys = the columns above).
+- \`datasets\`: object of all open tabs by name → row array.
+- \`echarts\`: Apache ECharts 5 (charts). \`console\`: console.log / console.error. \`parseMoney(s)\` / \`parseNum(s)\`: numeric parsers (thousands separators + decimal comma).
+- \`math\`: math.js — stats, linear algebra, regression. Use it instead of inventing formulas or coefficients.
+
+MATH (math.js, loaded as \`math\`):
+- Stats: \`math.mean(xs)\`, \`math.median(xs)\`, \`math.std(xs)\`, \`math.variance(xs)\`, \`math.quantileSeq(xs, 0.9)\`, \`math.min(xs)\`, \`math.max(xs)\`, \`math.sum(xs)\`.
+- Polynomial trend / regression of order n — copy this exactly (it normalises x so the fit stays stable; NEVER hardcode coefficients):
+    const xs = years, ys = values, n = 2;
+    const x0 = math.min(xs), span = (math.max(xs) - x0) || 1;
+    const A = xs.map(x => { const t = (x - x0) / span; return Array.from({ length: n + 1 }, (_, k) => t ** k); });
+    const coef = math.lusolve(math.multiply(math.transpose(A), A), math.multiply(math.transpose(A), ys)).flat();
+    const fit = xs.map(x => { const t = (x - x0) / span; return coef.reduce((s, c, k) => s + c * t ** k, 0); });
+    // then plot \`fit\` as an extra line series alongside the data
+
+RULES:
+- The snippet MUST \`return { html, data, reset }\`: \`html\` is a string rendered into the panel (Tailwind classes work; dark mode via \`dark:\` variants); \`data\` is the raw result (plain objects/arrays); \`reset()\` cleans up (e.g. dispose ECharts).
+- Each reply is a COMPLETE, standalone snippet — variables do NOT carry over between turns. On a follow-up/refinement, re-emit the WHOLE snippet (data prep + try/catch + the \`return { html, data, reset }\`) with your change applied; NEVER reply with a fragment, a diff, or a bare \`option = { … }\` / \`chart.setOption({ … })\`.
+- Wrap everything in try/catch; in catch, call \`console.error(error)\` and \`return { html: '<div class="text-red-600 p-3 text-sm">' + error.message + '</div>', data: {}, reset: () => {} }\`.
+- Charts: unique id \`'chart-' + Date.now()\`, give the container a pixel height, init inside \`requestAnimationFrame(() => { echarts.init(el).setOption({ ... }) })\`, and dispose it in \`reset()\`.
+- Field values arrive as STRINGS — use \`parseNum(row['Col'])\` (or \`parseMoney\` for money) for any numeric column before arithmetic.
+- Coerce before string ops: \`String(row['Col'] ?? '')\`. Use bracket access for column names with spaces.
+- This is for ANALYSIS, not chat: even when the user asks a question (e.g. "what is the trend?"), DO NOT reply in words — write code that COMPUTES the answer and renders it (a short \`html\` sentence and/or a chart).
+
+${example}
+
+Output ONLY the raw JavaScript snippet — no markdown fences, no explanation, no prose, no JSON. The whole reply must be runnable JavaScript.`
+    return [smallPrompt, pdfDocument].filter(Boolean).join('\n\n')
+  }
+
   return [role, outputFormat, answerRules, environment, refinementRules, codingRules, apisSection, dataContext, catalogExample, pdfExample, example, mapExample, pdfDocument]
     .filter(Boolean)
     .join('\n\n')
@@ -435,6 +478,29 @@ function extractErrorReason(json: unknown): string | null {
 // ---------------------------------------------------------------------------
 // JSON parsing
 // ---------------------------------------------------------------------------
+
+/** Extract the raw code from a small-model reply. The prompt asks for bare JS,
+ *  but code models often wrap it in a ```fence (sometimes with a line of prose);
+ *  pull the fenced block if present, otherwise take the text as-is. */
+function stripCodeFences(raw: string): string {
+  const text = raw.trim()
+  const fenced = text.match(/```(?:js|javascript|json|ts)?\s*\n?([\s\S]*?)```/i)
+  return (fenced ? fenced[1] : text).trim()
+}
+
+/** True if `code` parses as the body of an async function. Used in small-model
+ *  mode to tell a real code reply from a prose reply (free identifiers like
+ *  `data`/`echarts` compile fine; a French sentence does not). */
+function compilesAsFunctionBody(code: string): boolean {
+  if (!code) return false
+  try {
+    const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor as new (...args: string[]) => unknown
+    new AsyncFunction(code)
+    return true
+  } catch {
+    return false
+  }
+}
 
 function tryParseJson(raw: string): Record<string, unknown> | null {
   let text = raw
@@ -537,6 +603,7 @@ ${sandboxTheme ? `<script>tailwind.config=${esc(JSON.stringify({ darkMode: 'clas
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mathjs@13/lib/browser/math.js"></script>
 ${isPdf ? '<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>' : ''}
 <style>
 html,body{margin:0;padding:0;height:100%;box-sizing:border-box}
@@ -595,18 +662,26 @@ function __runFormula() {
   (async () => {
     const data = ${dataJson};
     const datasets = ${datasetsJson};
+    // Error objects have non-enumerable props, so JSON.stringify(err) === '{}' and the
+    // real message is lost. Render Errors as "Name: message"; other objects as JSON,
+    // with a safe fallback for circular structures.
+    const fmt = (x) => {
+      if (x instanceof Error) return (x.name || 'Error') + ': ' + x.message;
+      if (x !== null && typeof x === 'object') { try { return JSON.stringify(x); } catch (e) { return String(x); } }
+      return String(x);
+    };
     const mock = {
-      log:   (...a) => parent.postMessage({ t: 'log',  m: a.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' ') }, '*'),
-      info:  (...a) => parent.postMessage({ t: 'log',  m: a.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' ') }, '*'),
-      warn:  (...a) => parent.postMessage({ t: 'warn', m: a.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' ') }, '*'),
-      error: (...a) => parent.postMessage({ t: 'error',m: a.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' ') }, '*'),
+      log:   (...a) => parent.postMessage({ t: 'log',  m: a.map(fmt).join(' ') }, '*'),
+      info:  (...a) => parent.postMessage({ t: 'log',  m: a.map(fmt).join(' ') }, '*'),
+      warn:  (...a) => parent.postMessage({ t: 'warn', m: a.map(fmt).join(' ') }, '*'),
+      error: (...a) => parent.postMessage({ t: 'error',m: a.map(fmt).join(' ') }, '*'),
     };
     const root = document.getElementById('r');
     try {
       var __AsyncFn = Object.getPrototypeOf(async function(){}).constructor;
-      var __args = ['data', 'datasets', 'echarts', 'L', 'console', 'XLSX', 'jsPDF', 'pdfData', 'pdfjsLib', 'pdfText', 'parseMoney', 'parseNum', 'splitCols'];
+      var __args = ['data', 'datasets', 'echarts', 'L', 'console', 'XLSX', 'jsPDF', 'pdfData', 'pdfjsLib', 'pdfText', 'parseMoney', 'parseNum', 'splitCols', 'math'];
       var __formula = ${formulaJson};
-      var __vals = [data, datasets, typeof echarts !== 'undefined' ? echarts : undefined, typeof L !== 'undefined' ? L : undefined, mock, typeof XLSX !== 'undefined' ? XLSX : undefined, window.jspdf ? window.jspdf.jsPDF : undefined, __pdfData, typeof pdfjsLib !== 'undefined' ? pdfjsLib : undefined, pdfText, parseMoney, parseNum, splitCols];
+      var __vals = [data, datasets, typeof echarts !== 'undefined' ? echarts : undefined, typeof L !== 'undefined' ? L : undefined, mock, typeof XLSX !== 'undefined' ? XLSX : undefined, window.jspdf ? window.jspdf.jsPDF : undefined, __pdfData, typeof pdfjsLib !== 'undefined' ? pdfjsLib : undefined, pdfText, parseMoney, parseNum, splitCols, typeof math !== 'undefined' ? math : undefined];
       let result = await new __AsyncFn(...__args, __formula)(...__vals);
       // Tolerate a formula written as a function EXPRESSION instead of a bare body
       // (e.g. "async () => { ... return {html} }"): used as a body it is discarded
@@ -619,6 +694,7 @@ function __runFormula() {
         } catch (__e) { /* not a function expression — keep undefined */ }
       }
       if (typeof result === 'function') result = await result();   // formula did "return () => {...}"
+      if (typeof result === 'string') result = { html: result, data: null, reset: function(){} };   // tolerate a bare HTML-string return (common from small models)
       if (result && result.html) {
         root.innerHTML = result.html;
         if (typeof tailwind !== 'undefined' && typeof tailwind.refresh === 'function') tailwind.refresh();
@@ -684,6 +760,12 @@ export class LocalAssistant {
 
   get llm(): LLMConfig { return { ...this._config.llm } }
   set llm(v: LLMConfig) { this._config.llm = { ...v }; this._emit('llm:change', { ...this._config.llm }) }
+
+  /** Capability tier of the active model — set it from the selected model's
+   *  `LLMModelInfo.size`. 'small' leans the system prompt for local/edge models;
+   *  defaults to 'large' (full prompt). */
+  get modelSize(): 'small' | 'medium' | 'large' { return this._config.modelSize ?? 'large' }
+  set modelSize(v: 'small' | 'medium' | 'large') { this._config.modelSize = v }
 
   /** Encrypt a plain Gemini API key via the proxy and store it. Emits 'llm:change'. */
   async setLlmApiKey(plainKey: string): Promise<void> {
@@ -1104,6 +1186,7 @@ export class LocalAssistant {
       this.getActivePdfExtractedText(),
       this.getActivePdfPageCount(),
       exampleAnalysis,
+      this._config.modelSize,
     )
   }
 
@@ -1141,12 +1224,17 @@ export class LocalAssistant {
       this.getActivePdfExtractedText(),
       this.getActivePdfPageCount(),
       opts?.exampleAnalysis ?? null,
+      this._config.modelSize,
     )
     // App-supplied domain context goes first so it frames everything below.
     if (this._config.appContext) {
       systemPrompt = `# CONTEXT\n${this._config.appContext}\n\n${systemPrompt}`
     }
     this._lastSystemPrompt = systemPrompt
+
+    // Small/local models emit only code (see buildSystemPromptFn): turn JSON mode
+    // off and wrap the returned snippet into the response ourselves.
+    const small = (this._config.modelSize ?? 'large') === 'small'
 
     // The PDF document text rides in the system prompt (buildSystemPromptFn), so it
     // is bounded by the upload-size limit — never the per-message prompt-char limit —
@@ -1181,14 +1269,24 @@ export class LocalAssistant {
       }
     }
 
+    // On a small-mode follow-up the instruct-tuned model loves to answer with a diff
+    // ("// ... existing code", a bare `option = {…}`) plus prose, which then references
+    // variables from the prior turn that no longer exist. A rule buried in the system
+    // prompt loses to that reflex, so put the directive where it carries the most
+    // weight: appended to the user's own message — the last thing read before output.
+    // (Only the clean `llmMessage` is stored in history below, never this suffix.)
+    const refineSuffix = (small && this._history.length > 0)
+      ? '\n\n---\nIMPORTANT — this is a follow-up. Re-output your ENTIRE previous snippet with this change applied: the whole thing from `try {` to the final `}`, including all data preparation and the closing `return { html, data, reset }`. Do NOT output a diff, partial code, placeholder comments (e.g. `// ... existing code`), a bare `option = {…}` / `setOption({…})`, or any prose/markdown — ONLY the complete runnable snippet.'
+      : ''
+
     const llmResponse = await this._config.proxy.callLLM({
       ...this._llmRequestBase(),
       system: systemPrompt,
       messages: [
         ...this._turnsAsMessages(this._history),
-        { role: 'user', content: llmMessage, ...(feedback ? { context: feedback } : {}) },
+        { role: 'user', content: llmMessage + refineSuffix, ...(feedback ? { context: feedback } : {}) },
       ],
-      options: { thinking: true, json: true, temperature: 0.5 },
+      options: small ? { json: false, temperature: 0.2 } : { thinking: true, json: true, temperature: 0.5 },
     })
 
     if (!llmResponse.text) throw new Error('LLM returned an empty response')
@@ -1196,31 +1294,78 @@ export class LocalAssistant {
     let formula = ''; let answer = ''; let title = ''; let description = ''
     let dependencies: AnalysisDependencies | undefined
 
-    const parsed = tryParseJson(llmResponse.text)
-    if (parsed) {
-      formula      = String(parsed.formula     ?? '')
-      answer       = String(parsed.answer      ?? '')
-      title        = String(parsed.title       ?? '')
-      description  = String(parsed.description ?? '')
-      if (parsed.dependencies && typeof parsed.dependencies === 'object') {
-        const raw = parsed.dependencies as Record<string, unknown>
-        dependencies = {
-          data: Array.isArray(raw.data) ? (raw.data as unknown[]).filter((x): x is string => typeof x === 'string') : [],
-          datasets: (raw.datasets && typeof raw.datasets === 'object' && !Array.isArray(raw.datasets))
-            ? Object.fromEntries(
-                Object.entries(raw.datasets as Record<string, unknown>)
-                  .filter(([, v]) => Array.isArray(v))
-                  .map(([k, v]) => [k, (v as unknown[]).filter((x): x is string => typeof x === 'string')])
-              )
-            : {},
-        }
+    if (small) {
+      // Code-only reply: the snippet IS the formula; wrap it with a generic answer
+      // and a title taken from the start of the user's question (the model writes
+      // no title in this mode).
+      // Code/small models sometimes answer a question in prose instead of
+      // returning a snippet. Detect that (the reply doesn't compile as a function
+      // body) and surface it as a plain text answer, rather than feeding prose to
+      // the sandbox as a formula (which throws "Unexpected identifier …").
+      const code = stripCodeFences(llmResponse.text)
+      const q = userMessage.trim()
+      title = q.length > 60 ? q.slice(0, 60).replace(/\s+\S*$/, '') + '…' : q
+      if (compilesAsFunctionBody(code)) {
+        formula = code
+        answer = 'Voici le résultat.'
+      } else {
+        answer = code
       }
     } else {
-      answer = llmResponse.text.trim()
+      const parsed = tryParseJson(llmResponse.text)
+      if (parsed) {
+        formula      = String(parsed.formula     ?? '')
+        answer       = String(parsed.answer      ?? '')
+        title        = String(parsed.title       ?? '')
+        description  = String(parsed.description ?? '')
+        if (parsed.dependencies && typeof parsed.dependencies === 'object') {
+          const raw = parsed.dependencies as Record<string, unknown>
+          dependencies = {
+            data: Array.isArray(raw.data) ? (raw.data as unknown[]).filter((x): x is string => typeof x === 'string') : [],
+            datasets: (raw.datasets && typeof raw.datasets === 'object' && !Array.isArray(raw.datasets))
+              ? Object.fromEntries(
+                  Object.entries(raw.datasets as Record<string, unknown>)
+                    .filter(([, v]) => Array.isArray(v))
+                    .map(([k, v]) => [k, (v as unknown[]).filter((x): x is string => typeof x === 'string')])
+                )
+              : {},
+          }
+        }
+      } else {
+        answer = llmResponse.text.trim()
+      }
     }
 
+    // --- Debug trace ---------------------------------------------------------
+    // Enable in the browser console with: localStorage.localflow_debug = '1'
+    // Then re-run an analysis and copy the "LOCALFLOW DEBUG" block from the
+    // console. It captures the full exchange (prompt, conversation, raw model
+    // output, and how it was wrapped) so the whole context can be inspected.
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage.getItem('localflow_debug')) {
+        // eslint-disable-next-line no-console
+        console.log(
+          '\n===== LOCALFLOW DEBUG =====\n' +
+          JSON.stringify({
+            modelId: this._config.llm.modelId ?? '(proxy default)',
+            modelSize: this._config.modelSize ?? 'large',
+            jsonMode: !small,
+            systemPrompt,
+            messages: [
+              ...this._turnsAsMessages(this._history),
+              { role: 'user', content: llmMessage },
+            ],
+            rawResponse: llmResponse.text,
+            thoughts: llmResponse.thoughts ?? null,
+            wrapped: { title, answer, formula },
+          }, null, 2) +
+          '\n===== END LOCALFLOW DEBUG =====\n',
+        )
+      }
+    } catch { /* never let debug logging break a run */ }
+
     // Syntax-check the formula and transparently self-heal on error
-    const maxHealing = this._config.formulaHealingRetries ?? 1
+    const maxHealing = small ? 0 : (this._config.formulaHealingRetries ?? 1)
     if (formula && maxHealing > 0) {
       const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor as new (...args: string[]) => unknown
       const healMessages: LLMMessage[] = [
@@ -1240,11 +1385,18 @@ export class LocalAssistant {
       }
     }
 
-    // Append to conversation history — store llmMessage so PDF context persists across turns
+    // Append to conversation history — store llmMessage so PDF context persists across
+    // turns. In small/code-only mode, replay the assistant's turn as the raw code it
+    // actually produced (or its prose answer), NOT the synthesized JSON wrapper —
+    // otherwise the model sees its own past replies as JSON, which contradicts the
+    // "output only raw JavaScript, no JSON" instruction and breaks follow-ups.
+    const assistantTurn = small
+      ? (formula || answer)
+      : JSON.stringify({ answer, formula, title, description, dependencies })
     this._history = [
       ...this._history,
       { role: 'user',  parts: [{ text: llmMessage }] },
-      { role: 'model', parts: [{ text: JSON.stringify({ answer, formula, title, description, dependencies }) }] },
+      { role: 'model', parts: [{ text: assistantTurn }] },
     ]
 
     const response: AssistantResponse = {

@@ -45,6 +45,12 @@ export interface LocalAssistantConfig {
   /** Proxy instance — use ProxyClient for a real server or LocalProxy for standalone/dev mode. */
   proxy: Proxy
   llm: LLMConfig
+  /**
+   * Capability tier of the active model (from `LLMModelInfo.size`). 'small' makes
+   * the system prompt leaner for local/edge models that can't follow the full
+   * contract; 'large' (default) and 'medium' use the full prompt.
+   */
+  modelSize?: 'small' | 'medium' | 'large'
   darkMode?: boolean
   /**
    * App-specific domain context, prepended to the system prompt on every turn.

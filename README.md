@@ -309,6 +309,7 @@ interface LocalAssistantConfig {
   sandboxTheme?: Record<string, unknown>    // Tailwind theme object injected into the sandbox (see below)
   pdfFormulaRevision?: boolean        // silent self-correction on first PDF query (default: false)
   formulaHealingRetries?: number      // silent retries on JS syntax errors (default: 1)
+  modelSize?: 'small' | 'medium' | 'large'  // active model's capability tier; 'small' uses a lean code-only protocol for local/edge models (default: 'large')
 }
 
 interface LLMConfig {
