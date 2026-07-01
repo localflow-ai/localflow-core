@@ -122,6 +122,7 @@ export class LocalProxy implements Proxy {
       case 'gemini':    return this._callGemini(request)
       case 'openai':    return this._callOpenAI(request)
       case 'anthropic': return this._callAnthropic(request)
+      case 'ollama':    return this._callOllama(request)
       default:          throw new Error(`[LocalProxy] Unknown protocol: ${protocol}`)
     }
   }
@@ -142,7 +143,9 @@ export class LocalProxy implements Proxy {
       })),
       generation_config: {
         temperature: request.options?.temperature ?? 0.5,
-        ...(request.options?.thinking ? { thinking_config: { thinking_level: 'high', include_thoughts: true } } : {}),
+        ...((request.options?.reasoningEffort ?? (request.options?.thinking ? 'high' : undefined))
+          ? { thinking_config: { thinking_level: request.options?.reasoningEffort ?? 'high', include_thoughts: true } }
+          : {}),
         ...(request.options?.json    ? { response_mime_type: 'application/json' } : {}),
       },
     }
@@ -181,6 +184,7 @@ export class LocalProxy implements Proxy {
     }
     if (request.options?.json)    body.response_format = { type: 'json_object' }
     if (request.options?.thinking) body.thinking = { type: 'enabled' }
+    if (request.options?.reasoningEffort) body.reasoning_effort = request.options.reasoningEffort
 
     const res = await fetch(`${base}/v1/chat/completions`, {
       method: 'POST',
@@ -237,6 +241,38 @@ export class LocalProxy implements Proxy {
       text:    blocks.filter(b => b.type === 'text').map(b => b.text ?? '').join(''),
       thoughts: blocks.filter(b => b.type === 'thinking').map(b => b.thinking ?? '').join('') || undefined,
     }
+  }
+
+  private async _callOllama(request: LLMRequest): Promise<LLMResponse> {
+    // Ollama's OpenAI-compat /v1 can't control thinking — only its NATIVE /api/chat
+    // can. reasoningEffort 'low' ⇒ think:false (off), medium/high ⇒ on, unset ⇒
+    // Ollama's default. baseUrl may carry a trailing /v1 (stripped).
+    const base = (request.baseUrl ?? 'http://localhost:11434').replace(/\/+$/, '').replace(/\/v1$/, '')
+    const level = request.options?.reasoningEffort
+    const body: Record<string, unknown> = {
+      model: request.model ?? 'qwen3:8b',
+      messages: [
+        { role: 'system', content: request.system },
+        ...request.messages.map(m => ({ role: m.role, content: m.context ? `${m.context}\n\n${m.content}` : m.content })),
+      ],
+      stream: false,
+      options: { temperature: request.options?.temperature ?? 0.2 },
+    }
+    if (level !== undefined) body.think = level !== 'low'
+    else if (request.options?.thinking === false) body.think = false
+    if (request.options?.json) body.format = 'json'
+
+    const res = await fetch(`${base}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      const err = await res.text().catch(() => '')
+      throw new Error(`Ollama [${res.status}]: ${err.slice(0, 300) || res.statusText}`)
+    }
+    const data = await res.json() as { message?: { content?: string; thinking?: string } }
+    return { text: data.message?.content ?? '', thoughts: data.message?.thinking || undefined }
   }
 
   async getAvailableLLMs(): Promise<LLMModelInfo[]> { return [] }

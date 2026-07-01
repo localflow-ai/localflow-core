@@ -314,7 +314,7 @@ interface LocalAssistantConfig {
 
 interface LLMConfig {
   // --- BYOK (bring your own key) ---
-  protocol?: 'gemini' | 'openai' | 'anthropic'  // 'openai' covers any OpenAI-compatible endpoint
+  protocol?: 'gemini' | 'openai' | 'anthropic' | 'ollama'  // 'openai' = any OpenAI-compatible endpoint; 'ollama' = Ollama's native /api/chat (needed to control a thinking model)
   model?: string           // model ID — falls back to protocol default if omitted
   apiKey?: string          // encrypted key restored from storage — set via setLlmApiKey()
   baseUrl?: string         // override the protocol's default endpoint (LocalProxy only)

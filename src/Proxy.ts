@@ -1,7 +1,7 @@
 import type { ApiConfig, CrmObjectType } from './types'
 
 /** API protocol used to reach the LLM. 'openai' covers any OpenAI-compatible endpoint. */
-export type LLMProtocol = 'gemini' | 'openai' | 'anthropic'
+export type LLMProtocol = 'gemini' | 'openai' | 'anthropic' | 'ollama'
 
 /**
  * A binary attachment (image, PDF, …) sent alongside a message.
@@ -64,6 +64,12 @@ export interface LLMRequest {
     json?: boolean
     /** Enable extended thinking / chain-of-thought where supported. */
     thinking?: boolean
+    /**
+     * Reasoning depth where supported — OpenAI `reasoning_effort`, Gemini thinking
+     * level, Ollama `think` (`'low'` disables it on binary-thinking models).
+     * Overrides the model's server-configured default (`LLMModelInfo.reasoningEffort`).
+     */
+    reasoningEffort?: 'low' | 'medium' | 'high'
   }
 }
 
@@ -105,6 +111,13 @@ export interface LLMModelInfo {
    * default when unset) = full prompt.
    */
   size?: 'small' | 'medium' | 'large'
+  /**
+   * Default reasoning depth for this model, from `llm-configs.json`. The proxy
+   * applies it server-side unless a request overrides it (via
+   * `LLMRequest.options.reasoningEffort`); exposed so a client can display it.
+   * `'low'` effectively turns thinking off on binary-thinking models (Ollama).
+   */
+  reasoningEffort?: 'low' | 'medium' | 'high'
 }
 
 /**
