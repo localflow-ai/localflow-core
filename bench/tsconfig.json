@@ -1,0 +1,15 @@
+{
+  "//": "Type-check config for the benchmark harness only. The bench runs via tsx (no build step); this exists so `tsc -p bench` can verify it. It is NOT part of the published package (package.json `files` ships only dist).",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["."]
+}

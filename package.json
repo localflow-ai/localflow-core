@@ -17,15 +17,22 @@
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "README.md",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "bench": "tsx bench/run.ts",
+    "bench:report": "tsx bench/report.ts"
   },
   "devDependencies": {
+    "@types/node": "^26.0.1",
+    "mathjs": "^15.2.0",
+    "tsx": "^4.22.4",
     "typescript": "~6.0.2",
     "vitest": "^4.1.8"
   }

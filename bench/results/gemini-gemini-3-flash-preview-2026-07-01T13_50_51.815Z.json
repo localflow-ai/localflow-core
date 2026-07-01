@@ -1,0 +1,33 @@
+{
+  "provider": "gemini",
+  "model": "gemini-3-flash-preview",
+  "size": "large",
+  "deployment": "hosted",
+  "thinking": "low",
+  "host": {
+    "cpu": "Apple M5",
+    "cores": 10,
+    "arch": "arm64",
+    "ramGB": 16,
+    "platform": "darwin",
+    "osRelease": "25.4.0",
+    "gpu": "Apple Silicon (Metal)"
+  },
+  "date": "2026-07-01T13:50:51.815Z",
+  "runs": 3,
+  "latencyMsMedian": 7400,
+  "tasks": {
+    "aggregate-by-year": {
+      "passes": 3,
+      "runs": 3
+    },
+    "regression": {
+      "passes": 3,
+      "runs": 3
+    },
+    "refinement": {
+      "passes": 3,
+      "runs": 3
+    }
+  }
+}
