@@ -4,7 +4,10 @@ export { LocalProxy, LocalProxyRateLimitError } from './LocalProxy'
 export { hasApiKey } from './types'
 export { DENY_ALL, ALLOW_ALL, can, isModelAllowed, isApiAllowed } from './permissions'
 export type { Capability, PermissionLimits, EffectivePermissions } from './permissions'
-export type { Proxy, LLMProtocol, LLMMessage, LLMAttachment, LLMRequest, LLMResponse, LLMModelInfo, PublicConfig } from './Proxy'
+export type { Proxy, LLMProtocol, LLMMessage, LLMAttachment, LLMRequest, LLMResponse, LLMModelInfo, PublicConfig, DocumentFormat, DocumentMetadata, DocumentExtraction } from './Proxy'
+export { detectDocumentFormat } from './documentFormat'
+export { extractXlsxLocally } from './xlsxLocal'
+export type { XlsxModuleLike } from './xlsxLocal'
 export type { LocalProxyConfig, LocalProxyRateLimit } from './LocalProxy'
 export type {
   LocalAssistantConfig,

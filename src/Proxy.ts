@@ -3,6 +3,25 @@ import type { ApiConfig, CrmObjectType } from './types'
 /** API protocol used to reach the LLM. 'openai' covers any OpenAI-compatible endpoint. */
 export type LLMProtocol = 'gemini' | 'openai' | 'anthropic' | 'ollama'
 
+/** Formats supported by `Proxy.extractDocument()` (detected by magic bytes). */
+export type DocumentFormat = 'pdf' | 'xlsx'
+
+/** Format-specific details of an extracted document. Most callers can ignore it. */
+export interface DocumentMetadata {
+  /** Detected document format. */
+  format?: DocumentFormat
+  /** Names of the document's "pages" — sheet/tab names for spreadsheets. */
+  pageNames?: string[]
+}
+
+/** Result of `Proxy.extractDocument()`. */
+export interface DocumentExtraction {
+  text: string
+  /** Pages for a PDF, sheets for a spreadsheet. */
+  pageCount: number
+  documentMetadata?: DocumentMetadata
+}
+
 /**
  * A binary attachment (image, PDF, …) sent alongside a message.
  * Only used by the "send to AI" path — never produced in safe mode.
@@ -169,7 +188,18 @@ export interface Proxy {
     body: string | null,
   ): Promise<Response>
 
-  /** Extract text from a PDF. Not available in local mode. */
+  /**
+   * Extract text from a document (PDF or Excel .xlsx). The format is detected
+   * from the buffer's magic bytes — no type hint needed. `searchString` narrows
+   * the result to matching pages (PDF, ±1 context page) or sheets (Excel).
+   * Not available in local mode.
+   */
+  extractDocument(
+    buffer: ArrayBuffer,
+    searchString?: string,
+  ): Promise<DocumentExtraction>
+
+  /** @deprecated Use `extractDocument()` — identical behavior for PDF buffers. */
   extractPdf(
     buffer: ArrayBuffer,
     searchString?: string,

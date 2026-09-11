@@ -245,24 +245,41 @@ const assistant = new LocalAssistant({ proxy, llm: { protocol: 'gemini' }, resul
 
 **Self-hosting:** for production use, run your own instance — see the [localflow-proxy](https://github.com/localflow-ai/localflow-proxy) repository for setup instructions.
 
-### PDF extraction
+### Document extraction (PDF, Excel)
 
-PDF extraction requires a proxy (not available with `LocalProxy`).
+The format is detected from the buffer's magic bytes — PDF and Excel `.xlsx`
+are supported, no type hint needed. **PDF** extraction runs server-side and
+requires a proxy. **Excel** extraction runs **locally in the browser** when
+you pass your app's SheetJS module (`xlsxModule` option on `ProxyClient` /
+`LocalProxy`) — the workbook never leaves the device, standalone mode
+included; without the module, `ProxyClient` falls back to server-side
+extraction.
 
 ```typescript
-// Extract text via the proxy, then load as a dataset
-const { text, pageCount } = await proxy.extractPdf(pdfBuffer)
-assistant.addPdfDataset('report.pdf', pdfBuffer, text, pageCount)
+import * as XLSX from 'xlsx'
+const proxy = new ProxyClient(baseUrl, token, { xlsxModule: XLSX })
+```
 
-assistant.setActiveDataset('report.pdf')
+```typescript
+// Extract text via the proxy, then load as a document dataset
+const { text, pageCount, documentMetadata } = await proxy.extractDocument(buffer)
+assistant.addDocumentDataset('report.xlsx', buffer, text, pageCount, documentMetadata)
+
+assistant.setActiveDataset('report.xlsx')
 const response = await assistant.prompt('Summarise the key figures')
 ```
 
-Pass an optional `searchString` to receive only pages matching the query (plus one page of context either side):
+For a PDF, `pageCount` counts pages; for a workbook it counts sheets and
+`documentMetadata.pageNames` carries the sheet names. Pass an optional
+`searchString` to receive only pages/sheets matching the query (PDF matches
+include one context page either side; sheet names are searched too):
 
 ```typescript
-const { text, pageCount } = await proxy.extractPdf(pdfBuffer, 'revenue')
+const { text, pageCount } = await proxy.extractDocument(buffer, 'revenue')
 ```
+
+> `extractPdf()` / `addPdfDataset()` still work but are deprecated aliases of
+> the document functions.
 
 ### Wire up external APIs (optional)
 
@@ -359,17 +376,20 @@ Datasets are ordered key-value pairs: name → array of row objects (tabular) or
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `addDataset(name, rows)` | `void` | Add or replace a tabular dataset. First added becomes active. |
-| `addPdfDataset(name, buffer, extractedText, pageCount)` | `void` | Add a PDF document. Pass the text returned by `proxy.extractPdf()`. |
+| `addDocumentDataset(name, buffer, extractedText?, pageCount?, documentMetadata?)` | `void` | Add a document (PDF, Excel workbook…). Pass the values returned by `proxy.extractDocument()`. |
 | `removeDataset(name)` | `void` | Remove a dataset. Active dataset moves to next available. |
 | `updateDataset(name, rows)` | `void` | Replace rows for an existing dataset. |
 | `getDataset(name)` | `rows \| undefined` | Read rows for a named dataset. |
 | `getDatasets()` | `Record<string, rows[]>` | All datasets as a plain object. |
 | `setActiveDataset(name)` | `void` | Mark a dataset as active (`data` variable in formulas). |
-| `getActiveDataset()` | `{ name, type, rows, columns } \| null` | Current active dataset. `type` is `'table'` or `'pdf'`. |
-| `getActivePdfBuffer()` | `ArrayBuffer \| null` | Raw bytes of the active PDF. |
-| `getActivePdfExtractedText()` | `string` | Extracted text of the active PDF. |
-| `getActivePdfPageCount()` | `number` | Page count of the active PDF. |
+| `getActiveDataset()` | `{ name, type, rows, columns } \| null` | Current active dataset. `type` is `'table'`, `'pdf'` (PDF document) or `'document'` (other document formats). |
+| `getActiveDocumentBuffer()` | `ArrayBuffer \| null` | Raw bytes of the active document. |
+| `getActiveDocumentExtractedText()` | `string` | Extracted text of the active document. |
+| `getActiveDocumentPageCount()` | `number` | Page count (PDF pages or workbook sheets) of the active document. |
+| `getActiveDocumentMetadata()` | `DocumentMetadata \| null` | Format + sheet names of the active document. |
 | `clearDatasets()` | `void` | Remove all datasets and reset active. |
+| `addPdfDataset(name, buffer, extractedText, pageCount)` | `void` | **Deprecated** — alias of `addDocumentDataset(…, { format: 'pdf' })`. |
+| `getActivePdfBuffer()` / `getActivePdfExtractedText()` / `getActivePdfPageCount()` | — | **Deprecated** — aliases of the `getActiveDocument*()` getters. |
 
 ```typescript
 assistant.addDataset('Sales Q1', salesRows)
@@ -549,7 +569,7 @@ assistant.off('message', myListener)
 | `api:error` | `{ url, hostname, apiConfig, reason }` | An active API returned a JSON error body (e.g. expired key, quota exceeded). `reason` is extracted from the response. |
 | `data:local` | `{ data: string, action: string }` | An action completed entirely in the browser. E.g. file loaded from disk, formula executed in sandbox. Emitted by the app layer. |
 | `data:proxy` | `{ data: string, action: string }` | Data was sent to the proxy server but not to the LLM. E.g. PDF extraction. Emitted by the app layer. |
-| `data:llm` | `LlmDataPayload` | Data was forwarded to the LLM. Categorical payload — no display strings. `kind` is `'table'`, `'pdf'`, or `'text'`; always includes `query` (raw user message) and `dataset` (file/dataset name). Table events include `columns: number`; PDF events include `pages: number`. Import the type: `import type { LlmDataPayload } from '@localflow/core'`. |
+| `data:llm` | `LlmDataPayload` | Data was forwarded to the LLM. Categorical payload — no display strings. `kind` is `'table'`, `'pdf'`, `'document'` (non-PDF document, e.g. Excel), or `'text'`; always includes `query` (raw user message) and `dataset` (file/dataset name). Table events include `columns: number`; PDF/document events include `pages: number`. Import the type: `import type { LlmDataPayload } from '@localflow/core'`. |
 | `data:api-proxy` | `ApiProxyPayload` | A formula fetch was routed through the api-proxy — fired on every call (success and failure). Includes `url`, `method`, `body` (raw request body — what left the browser), `apiConfig` (matched API definition or `null` if unrecognised), and `status` (HTTP response status; `undefined` on network error). Import the type: `import type { ApiProxyPayload } from '@localflow/core'`. |
 
 ---
@@ -578,6 +598,8 @@ interface Proxy {
   getApiConfigs(): Promise<ApiConfig[]>
   proxyApiCall(url: string, method: string, headers: Record<string, string>, body: string): Promise<Response>
 
+  extractDocument(buffer: ArrayBuffer, searchString?: string): Promise<DocumentExtraction>
+  /** @deprecated Use extractDocument() */
   extractPdf(buffer: ArrayBuffer, searchString?: string): Promise<{ text: string; pageCount: number }>
 
   listObjectTypes(): Promise<CrmObjectType[]>
@@ -605,6 +627,7 @@ new LocalProxy(config?: {
     maxPerDay: number            // per-browser daily cap (tracked in localStorage)
     storageKey?: string          // localStorage key prefix — defaults to '_lf_rl'
   }
+  xlsxModule?: unknown           // your app's SheetJS module — enables local Excel extraction
 })
 ```
 
@@ -643,6 +666,7 @@ try {
 | `callLLM` | Calls the LLM provider directly from the browser. For Gemini, uses `geminiApiKey` if no key is set and applies the rate limit. |
 | `getAvailableLLMs` | Returns `[]` — user configures the model directly via `LLMConfig`. |
 | `encryptMessage` / `decryptMessage` | No-ops — the key is stored and used as plain text |
+| `extractDocument` | Works for Excel `.xlsx` when `xlsxModule` is configured (fully in-browser); throws for PDF (needs a server-side proxy) |
 | `extractPdf` | Throws — PDF extraction is not available in standalone mode |
 | `listObjectTypes` / `getObjectMetadata` / `getData` | Return empty results — no CRM access |
 | `connect` / `getSessionInfo` | No-ops — no session management |
@@ -656,7 +680,7 @@ HTTP client for a [LocalFlow proxy](https://github.com/localflow-ai/localflow-pr
 ```typescript
 import { ProxyClient } from '@localflow/core'
 
-const proxy = new ProxyClient(baseUrl, token?)
+const proxy = new ProxyClient(baseUrl, token?, { xlsxModule?: XLSX })
 ```
 
 | Parameter | Type | Description |
@@ -689,7 +713,8 @@ const proxy = new ProxyClient(baseUrl, token?)
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `extractPdf(buffer, searchString?)` | `Promise<{ text, pageCount }>` | Extract text from a PDF via the proxy. Pass an optional `searchString` to receive only pages matching the query (plus one page of context either side). |
+| `extractDocument(buffer, searchString?)` | `Promise<DocumentExtraction>` | Extract text from a document (PDF or Excel `.xlsx`, detected by magic bytes). Excel is extracted **locally in the browser** when `xlsxModule` was provided, else via the proxy; PDF always goes through the proxy. `documentMetadata` carries the format and, for workbooks, sheet names. `searchString` narrows to matching pages/sheets. |
+| `extractPdf(buffer, searchString?)` | `Promise<{ text, pageCount }>` | **Deprecated** — use `extractDocument()`. |
 
 ##### CRM
 

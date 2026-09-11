@@ -1,5 +1,7 @@
 import type { ApiConfig, CrmObjectType } from './types'
-import type { Proxy, LLMRequest, LLMResponse, LLMModelInfo, PublicConfig } from './Proxy'
+import type { Proxy, LLMRequest, LLMResponse, LLMModelInfo, PublicConfig, DocumentExtraction, DocumentMetadata } from './Proxy'
+import { detectDocumentFormat } from './documentFormat'
+import { extractXlsxLocally } from './xlsxLocal'
 import { DENY_ALL, ALLOW_ALL, type EffectivePermissions } from './permissions'
 
 /**
@@ -9,10 +11,14 @@ export class ProxyClient implements Proxy {
   baseUrl: string
   token: string | null
 
-  constructor(baseUrl: string, token: string | null = null) {
+  constructor(baseUrl: string, token: string | null = null, opts?: { xlsxModule?: unknown }) {
     this.baseUrl = baseUrl
     this.token = token
+    this._xlsxModule = opts?.xlsxModule
   }
+
+  /** Host-app-provided SheetJS module — enables local (in-browser) Excel extraction. */
+  private _xlsxModule: unknown
 
   isConnected(): boolean { return !!this.token }
 
@@ -133,6 +139,47 @@ export class ProxyClient implements Proxy {
     })
   }
 
+  async extractDocument(buffer: ArrayBuffer, searchString?: string): Promise<DocumentExtraction> {
+    const format = detectDocumentFormat(buffer)
+    if (format === 'pdf') {
+      // Rides the long-standing /common/extract-pdf endpoint — works against
+      // every deployed proxy, no server update needed for PDFs.
+      const { text, pageCount } = await this.extractPdf(buffer, searchString)
+      return { text, pageCount, documentMetadata: { format: 'pdf' } }
+    }
+    if (format === 'xlsx') {
+      // Local-first: with a host-provided SheetJS module the workbook is parsed
+      // in the browser and never leaves the device; the proxy is the fallback.
+      if (this._xlsxModule) return extractXlsxLocally(this._xlsxModule, buffer, searchString)
+      if (!this.token) throw new Error('Not authenticated')
+      const url = new URL(`${this.baseUrl}/common/extract-document`)
+      if (searchString) url.searchParams.set('searchString', searchString)
+      const res = await fetch(url.toString(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: buffer,
+      })
+      if (res.status === 404) {
+        throw new Error('This proxy does not support document extraction yet — update localflow-proxy (needs /common/extract-document).')
+      }
+      const data = await this._handle(res) as {
+        text?: string; content?: string
+        pageCount?: number; returnedPages?: number
+        documentMetadata?: DocumentMetadata
+      }
+      return {
+        text: data.text ?? data.content ?? '',
+        pageCount: data.pageCount ?? data.returnedPages ?? 0,
+        documentMetadata: { format: 'xlsx', ...data.documentMetadata },
+      }
+    }
+    throw new Error('Unsupported document format — supported: PDF (%PDF header) and Excel .xlsx (zip header).')
+  }
+
+  /** @deprecated Use `extractDocument()` — identical behavior for PDF buffers. */
   async extractPdf(buffer: ArrayBuffer, searchString?: string): Promise<{ text: string; pageCount: number }> {
     if (!this.token) throw new Error('Not authenticated')
     const url = new URL(`${this.baseUrl}/common/extract-pdf`)

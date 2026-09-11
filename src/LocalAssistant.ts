@@ -4,7 +4,7 @@ import type {
   ConversationTurn, ApiConfig, ApiPreference, ActivatedApi,
   AnalysisMatchHook, AnalysisMatchContext, AnalysisMatchResult,
 } from './types'
-import type { Proxy, LLMRequest, LLMMessage } from './Proxy'
+import type { Proxy, LLMRequest, LLMMessage, DocumentMetadata } from './Proxy'
 import { parseMoney, parseNum, splitCols } from './sandboxHelpers'
 
 const DEFAULT_SANDBOX_PERMISSIONS = [
@@ -59,10 +59,11 @@ function buildSystemPromptFn(
   rows: Record<string, unknown>[],
   datasets: Record<string, Record<string, unknown>[]>,
   activatedApis: ActivatedApi[],
-  activeDatasetType: 'table' | 'pdf',
+  activeDatasetType: 'table' | 'pdf' | 'document',
   activeDatasetName: string | null,
   pdfExtractedText: string,
   pdfPageCount: number,
+  documentMetadata?: DocumentMetadata,
   exampleAnalysis?: AnalysisSuggestion | null,
   size: 'small' | 'medium' | 'large' = 'large',
 ): string {
@@ -114,7 +115,8 @@ Your code IS the body of an async function — write the statements directly and
 - \`XLSX\`: xlsx-js-style library. Use it **only when the user explicitly asks for an Excel file**. Full cell styling is supported via the \`.s\` property (font, fill, border, alignment, number format). To trigger a download: \`XLSX.writeFile(wb, 'filename.xlsx')\`.
 - \`jsPDF\`: jsPDF 2.x constructor. Use it **only when the user explicitly asks for a PDF file**. Create structured multi-page PDFs with text, shapes, images and tables. Page numbers: iterate pages and call \`doc.text('Page X / Y', x, y)\`. To download: \`doc.save('filename.pdf')\`.
 ${activeDatasetType === 'pdf' ? `- \`pdfData\`: Uint8Array — raw bytes of the active PDF document.
-- \`pdfjsLib\`: PDF.js 3.x — use it to parse the PDF. Worker is disabled for sandbox compatibility (all parsing runs in the main thread).` : ''}
+- \`pdfjsLib\`: PDF.js 3.x — use it to parse the PDF. Worker is disabled for sandbox compatibility (all parsing runs in the main thread).` : activeDatasetType === 'document' ? `- \`documentData\`: Uint8Array — raw bytes of the active document (Excel workbook).
+- Parsing the workbook directly with \`XLSX.read(documentData)\` is allowed (exception to the "only when the user explicitly asks for an Excel file" rule) — but prefer \`pdfText\`, the pre-extracted text.` : ''}
 - \`parseMoney(s)\`: use for any monetary column (debit, credit, balance, amount, price, total). Handles thousands separators (space/apostrophe), a decimal comma, and a trailing currency/unit code (EUR, CHF, UNT). Returns NaN for non-monetary strings (account/reference numbers, codes with '/', descriptions) — safe to call on every column value.
 - \`parseNum(s)\`: use for other numeric columns (quantities, prices, percentages, counts). Handles thousands separators (space/apostrophe) and a decimal comma; a trailing unit is ignored. Does not reject non-numeric input the way parseMoney does.
 - \`splitCols(line)\`: splits a pipe-separated pdfText line into a trimmed array of column strings.
@@ -163,12 +165,16 @@ Do NOT use \`window\`, \`import\`, or \`require\`. Do NOT call APIs not listed i
       }).join('\n\n')
     : ''
 
-  const dataContext = activeDatasetType === 'pdf' ? `\
-# ACTIVE DATASET IS A PDF DOCUMENT
+  const dataContext = activeDatasetType === 'pdf' || activeDatasetType === 'document' ? `\
+${activeDatasetType === 'pdf' ? `# ACTIVE DATASET IS A PDF DOCUMENT
 Tab: "${activeDatasetName ?? ''}" (${pdfPageCount} page${pdfPageCount !== 1 ? 's' : ''})
 The full document text is included below in this system prompt (section "PDF DOCUMENT TEXT") — use it to understand the content and structure.
 In formulas: use \`pdfText\` (pre-extracted string) split by '\\n' to process line by line. Pages are separated by "## Page N" headers.
-Do NOT use \`data\` (empty). \`pdfData\` + \`pdfjsLib\` are available for raw positional extraction if needed.
+Do NOT use \`data\` (empty). \`pdfData\` + \`pdfjsLib\` are available for raw positional extraction if needed.` : `# ACTIVE DATASET IS A DOCUMENT (Excel workbook)
+Tab: "${activeDatasetName ?? ''}" (${pdfPageCount} sheet${pdfPageCount !== 1 ? 's' : ''}${documentMetadata?.pageNames?.length ? ` — ${documentMetadata.pageNames.map(n => `"${n}"`).join(', ')}` : ''})
+The full document text is included below in this system prompt (section "DOCUMENT TEXT") — use it to understand the content and structure.
+In formulas: use \`pdfText\` (pre-extracted string) split by '\\n' to process line by line. Sheets are separated by "## Page N" headers.
+Do NOT use \`data\` (empty). \`documentData\` (raw workbook bytes) + \`XLSX.read(documentData)\` are available for direct workbook parsing if needed.`}
 
 *STRUCTURE FIRST — separate static from dynamic*:
 A document TYPE is defined by its STATIC structure: the parts identical in every document of that type — column-header lines, field labels and consolidation captions (an identifier/reference label, a total caption, a date label…). Everything else is DYNAMIC: values, line items, section names, counts. Anchor on the static parts to locate and read the dynamic ones; never hardcode a dynamic value.
@@ -260,7 +266,7 @@ Title: ${exampleAnalysis.title ?? ''}${exampleAnalysis.description ? `\nDescript
 ${exampleAnalysis.formula.split('\n').slice(0, 160).join('\n')}
 \`\`\`` : ''
 
-  const pdfExample = activeDatasetType === 'pdf' ? `\
+  const pdfExample = activeDatasetType === 'pdf' || activeDatasetType === 'document' ? `\
 # ILLUSTRATIONS — adapt to THIS document; never copy verbatim
 These show the METHOD (verify the static structure, then anchor on static text to read dynamic values). The real layout — where the total sits, whether sections are flat or nested — is whatever this document shows. Adapt the static anchors, the row test, and the column mapping.
 
@@ -397,9 +403,9 @@ return { html: \`<p class="p-3 text-sm">Same structure: \${matches ? 'yes' : 'no
   // for the model's context window), so it must NOT count against the per-message
   // prompt-char limit that guards user-typed input.
   const PDF_MAX_CHARS = 400_000  // ~100K tokens — within the model context window
-  const pdfDocument = activeDatasetType === 'pdf' && pdfExtractedText
-    ? `# PDF DOCUMENT TEXT — "${activeDatasetName ?? ''}"
-This is the active PDF's extracted text — the same string exposed as \`pdfText\` in formulas (columns separated by " | ", pages by "## Page N" headers). Read it to understand the structure; never hardcode any dynamic value (amount, name, date) read from it.
+  const pdfDocument = (activeDatasetType === 'pdf' || activeDatasetType === 'document') && pdfExtractedText
+    ? `# ${activeDatasetType === 'pdf' ? 'PDF DOCUMENT TEXT' : 'DOCUMENT TEXT'} — "${activeDatasetName ?? ''}"
+This is the active document's extracted text — the same string exposed as \`pdfText\` in formulas (columns separated by " | ", ${activeDatasetType === 'pdf' ? 'pages' : 'sheets'} by "## Page N" headers). Read it to understand the structure; never hardcode any dynamic value (amount, name, date) read from it.
 
 [Mandatory] When you write the formula, add a console.log for every line in both passes:
 - Pass 1: log the raw line and the type you assign it.
@@ -679,9 +685,9 @@ function __runFormula() {
     const root = document.getElementById('r');
     try {
       var __AsyncFn = Object.getPrototypeOf(async function(){}).constructor;
-      var __args = ['data', 'datasets', 'echarts', 'L', 'console', 'XLSX', 'jsPDF', 'pdfData', 'pdfjsLib', 'pdfText', 'parseMoney', 'parseNum', 'splitCols', 'math'];
+      var __args = ['data', 'datasets', 'echarts', 'L', 'console', 'XLSX', 'jsPDF', 'pdfData', 'documentData', 'pdfjsLib', 'pdfText', 'parseMoney', 'parseNum', 'splitCols', 'math'];
       var __formula = ${formulaJson};
-      var __vals = [data, datasets, typeof echarts !== 'undefined' ? echarts : undefined, typeof L !== 'undefined' ? L : undefined, mock, typeof XLSX !== 'undefined' ? XLSX : undefined, window.jspdf ? window.jspdf.jsPDF : undefined, __pdfData, typeof pdfjsLib !== 'undefined' ? pdfjsLib : undefined, pdfText, parseMoney, parseNum, splitCols, typeof math !== 'undefined' ? math : undefined];
+      var __vals = [data, datasets, typeof echarts !== 'undefined' ? echarts : undefined, typeof L !== 'undefined' ? L : undefined, mock, typeof XLSX !== 'undefined' ? XLSX : undefined, window.jspdf ? window.jspdf.jsPDF : undefined, __pdfData, __pdfData, typeof pdfjsLib !== 'undefined' ? pdfjsLib : undefined, pdfText, parseMoney, parseNum, splitCols, typeof math !== 'undefined' ? math : undefined];
       let result = await new __AsyncFn(...__args, __formula)(...__vals);
       // Tolerate a formula written as a function EXPRESSION instead of a bare body
       // (e.g. "async () => { ... return {html} }"): used as a body it is discarded
@@ -730,7 +736,7 @@ if (${isPdf ? 'true' : 'false'}) { parent.postMessage({ t: 'ready' }, '*'); } el
 /** Internal dataset storage — tabular rows or a raw document buffer with extracted text */
 type InternalDataset =
   | { type: 'table'; rows: Record<string, unknown>[] }
-  | { type: 'pdf';   buffer: ArrayBuffer; extractedText: string; pageCount: number }
+  | { type: 'document'; buffer: ArrayBuffer; extractedText: string; pageCount: number; documentMetadata?: DocumentMetadata }
 
 export class LocalAssistant {
   private _config: LocalAssistantConfig
@@ -742,7 +748,7 @@ export class LocalAssistant {
   private _history: ConversationTurn[] = []
   private _matchHook: AnalysisMatchHook | null = null
   private _lastSystemPrompt = ''
-  private _lastPdfPrompted: string | null = null  // active PDF name of the current history (reset on switch)
+  private _lastPdfPrompted: string | null = null  // active document name of the current history (reset on switch)
   private _pendingFormulaFeedback: string | null = null
   private _listeners: Map<string, Set<Function>> = new Map()
   private _iframe?: HTMLIFrameElement
@@ -805,11 +811,22 @@ export class LocalAssistant {
     this._emit('dataset:change')
   }
 
-  /** Add a PDF document as a dataset. Pass extracted text so the LLM can see the content. */
-  addPdfDataset(name: string, buffer: ArrayBuffer, extractedText = '', pageCount = 0): void {
-    this._datasets.set(name, { type: 'pdf', buffer, extractedText, pageCount })
+  /**
+   * Add a document (PDF, Excel workbook…) as a dataset. Pass the text and
+   * metadata returned by `proxy.extractDocument()` so the LLM can see the
+   * content; without text the LLM gets no document context, but formulas can
+   * still parse the raw buffer in the sandbox. `pageCount` counts PDF pages or
+   * spreadsheet sheets.
+   */
+  addDocumentDataset(name: string, buffer: ArrayBuffer, extractedText = '', pageCount = 0, documentMetadata?: DocumentMetadata): void {
+    this._datasets.set(name, { type: 'document', buffer, extractedText, pageCount, documentMetadata })
     if (this._datasets.size === 1) this._activeDatasetName = name
     this._emit('dataset:change')
+  }
+
+  /** @deprecated Use `addDocumentDataset()`. */
+  addPdfDataset(name: string, buffer: ArrayBuffer, extractedText = '', pageCount = 0): void {
+    this.addDocumentDataset(name, buffer, extractedText, pageCount, { format: 'pdf' })
   }
 
   removeDataset(name: string): void {
@@ -845,32 +862,53 @@ export class LocalAssistant {
     if (this._datasets.has(name)) this._activeDatasetName = name
   }
 
-  getActiveDataset(): { name: string; rows: Record<string, unknown>[]; columns: string[]; type: 'table' | 'pdf' } | null {
+  getActiveDataset(): { name: string; rows: Record<string, unknown>[]; columns: string[]; type: 'table' | 'pdf' | 'document' } | null {
     if (!this._activeDatasetName) return null
     const entry = this._datasets.get(this._activeDatasetName)
     if (!entry) return null
-    if (entry.type === 'pdf') return { name: this._activeDatasetName, rows: [], columns: [], type: 'pdf' }
+    // PDFs keep reporting type 'pdf' so existing consumers' checks stay valid;
+    // other document formats report 'document'.
+    if (entry.type === 'document') {
+      const type = entry.documentMetadata?.format === 'pdf' ? 'pdf' : 'document'
+      return { name: this._activeDatasetName, rows: [], columns: [], type }
+    }
     return { name: this._activeDatasetName, rows: entry.rows, columns: entry.rows.length > 0 ? Object.keys(entry.rows[0]) : [], type: 'table' }
   }
 
-  /** Returns the raw PDF buffer for the active dataset, or null if not a PDF. */
-  getActivePdfBuffer(): ArrayBuffer | null {
+  /** Returns the raw buffer of the active document dataset, or null if the active dataset is tabular. */
+  getActiveDocumentBuffer(): ArrayBuffer | null {
     if (!this._activeDatasetName) return null
     const entry = this._datasets.get(this._activeDatasetName)
-    return entry?.type === 'pdf' ? entry.buffer : null
+    return entry?.type === 'document' ? entry.buffer : null
   }
 
-  getActivePdfExtractedText(): string {
+  getActiveDocumentExtractedText(): string {
     if (!this._activeDatasetName) return ''
     const entry = this._datasets.get(this._activeDatasetName)
-    return entry?.type === 'pdf' ? entry.extractedText : ''
+    return entry?.type === 'document' ? entry.extractedText : ''
   }
 
-  getActivePdfPageCount(): number {
+  /** Pages for a PDF, sheets for a spreadsheet. */
+  getActiveDocumentPageCount(): number {
     if (!this._activeDatasetName) return 0
     const entry = this._datasets.get(this._activeDatasetName)
-    return entry?.type === 'pdf' ? entry.pageCount : 0
+    return entry?.type === 'document' ? entry.pageCount : 0
   }
+
+  getActiveDocumentMetadata(): DocumentMetadata | null {
+    if (!this._activeDatasetName) return null
+    const entry = this._datasets.get(this._activeDatasetName)
+    return (entry?.type === 'document' ? entry.documentMetadata : null) ?? null
+  }
+
+  /** @deprecated Use `getActiveDocumentBuffer()`. */
+  getActivePdfBuffer(): ArrayBuffer | null { return this.getActiveDocumentBuffer() }
+
+  /** @deprecated Use `getActiveDocumentExtractedText()`. */
+  getActivePdfExtractedText(): string { return this.getActiveDocumentExtractedText() }
+
+  /** @deprecated Use `getActiveDocumentPageCount()`. */
+  getActivePdfPageCount(): number { return this.getActiveDocumentPageCount() }
 
   clearDatasets(): void {
     this._datasets.clear()
@@ -1034,7 +1072,7 @@ export class LocalAssistant {
           return
         }
         if (d.t === 'ready') {
-          const buffer = this.getActivePdfBuffer()
+          const buffer = this.getActiveDocumentBuffer()
           if (buffer) iframe.contentWindow?.postMessage({ t: 'document-data', buffer }, '*')
           return
         }
@@ -1183,8 +1221,9 @@ export class LocalAssistant {
       this.getActivatedApis(),
       active?.type ?? 'table',
       this._activeDatasetName,
-      this.getActivePdfExtractedText(),
-      this.getActivePdfPageCount(),
+      this.getActiveDocumentExtractedText(),
+      this.getActiveDocumentPageCount(),
+      this.getActiveDocumentMetadata() ?? undefined,
       exampleAnalysis,
       this._config.modelSize,
     )
@@ -1221,8 +1260,9 @@ export class LocalAssistant {
       this.getActivatedApis(),
       active?.type ?? 'table',
       this._activeDatasetName,
-      this.getActivePdfExtractedText(),
-      this.getActivePdfPageCount(),
+      this.getActiveDocumentExtractedText(),
+      this.getActiveDocumentPageCount(),
+      this.getActiveDocumentMetadata() ?? undefined,
       opts?.exampleAnalysis ?? null,
       this._config.modelSize,
     )
@@ -1241,7 +1281,7 @@ export class LocalAssistant {
     // and the user message stays just the question. Reset history when switching to a
     // different PDF so prior Q&A about another document doesn't leak in.
     let llmMessage = userMessage
-    if (active?.type === 'pdf') {
+    if (active?.type === 'pdf' || active?.type === 'document') {
       if (this._lastPdfPrompted && this._lastPdfPrompted !== active.name && this._history.length > 0) {
         this._history = []
         this._emit('history:reset')
@@ -1261,7 +1301,9 @@ export class LocalAssistant {
     {
       const dataset = this._activeDatasetName ?? ''
       if (active?.type === 'pdf') {
-        this._emit('data:llm', { kind: 'pdf',   query: userMessage, dataset, pages:   this.getActivePdfPageCount() })
+        this._emit('data:llm', { kind: 'pdf',      query: userMessage, dataset, pages: this.getActiveDocumentPageCount() })
+      } else if (active?.type === 'document') {
+        this._emit('data:llm', { kind: 'document', query: userMessage, dataset, pages: this.getActiveDocumentPageCount() })
       } else if (active && active.columns.length > 0) {
         this._emit('data:llm', { kind: 'table', query: userMessage, dataset, columns: active.columns.length })
       } else {
@@ -1430,8 +1472,8 @@ export class LocalAssistant {
       this.getDatasets(),
       formula,
       this.darkMode,
-      active?.type === 'pdf',
-      this.getActivePdfExtractedText(),
+      active?.type === 'pdf' || active?.type === 'document',
+      this.getActiveDocumentExtractedText(),
       this._config.sandboxTheme,
     )
   }

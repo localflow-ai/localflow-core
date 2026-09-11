@@ -1,5 +1,7 @@
 import type { ApiConfig, CrmObjectType } from './types'
-import type { Proxy, LLMRequest, LLMResponse, LLMModelInfo, LLMProtocol } from './Proxy'
+import type { Proxy, LLMRequest, LLMResponse, LLMModelInfo, LLMProtocol, DocumentExtraction } from './Proxy'
+import { detectDocumentFormat } from './documentFormat'
+import { extractXlsxLocally } from './xlsxLocal'
 
 export interface LocalProxyRateLimit {
   /** Maximum requests per calendar day, tracked per browser via localStorage. */
@@ -28,6 +30,13 @@ export interface LocalProxyConfig {
    * shared key for everyone.
    */
   rateLimit?: LocalProxyRateLimit
+  /**
+   * Host-app-provided SheetJS module (`import * as XLSX from 'xlsx'`).
+   * Enables `extractDocument()` for Excel workbooks fully in-browser —
+   * standalone mode included. Without it, extraction throws (PDF always
+   * needs a server-side proxy).
+   */
+  xlsxModule?: unknown
 }
 
 /** Thrown by `callLLM` when the per-browser daily limit is reached. */
@@ -58,7 +67,8 @@ const DEFAULT_ANTHROPIC_BASE = 'https://api.anthropic.com'
  * - encryptMessage / decryptMessage are no-ops (the plain key is used directly)
  * - callLLM calls the LLM API directly from the browser (key visible in DevTools)
  * - proxyApiCall is a direct browser fetch (subject to CORS on the target server)
- * - extractPdf is not available
+ * - extractDocument works for Excel when `xlsxModule` is configured (fully
+ *   in-browser); PDF extraction (extractPdf) is not available
  * - CRM methods return empty results
  *
  * ⚠️  NOT FOR PRODUCTION — switch to ProxyClient + a real LocalFlow proxy before deploying.
@@ -69,12 +79,14 @@ export class LocalProxy implements Proxy {
   private _geminiBase: string
   private _geminiApiKey: string | undefined
   private _rateLimit: LocalProxyRateLimit | undefined
+  private _xlsxModule: unknown
 
   constructor(config: LocalProxyConfig = {}) {
     this._apis = config.apis ?? []
     this._geminiBase = config.geminiBaseUrl ?? DEFAULT_GEMINI_BASE
     this._geminiApiKey = config.geminiApiKey
     this._rateLimit = config.rateLimit
+    this._xlsxModule = config.xlsxModule
     console.warn('[LocalProxy] Running in standalone/local mode. Not for production use.')
   }
 
@@ -288,6 +300,18 @@ export class LocalProxy implements Proxy {
     return fetch(url, { method, headers, body: body ?? undefined })
   }
 
+  async extractDocument(buffer: ArrayBuffer, searchString?: string): Promise<DocumentExtraction> {
+    const format = detectDocumentFormat(buffer)
+    if (format === 'xlsx' && this._xlsxModule) {
+      return extractXlsxLocally(this._xlsxModule, buffer, searchString)
+    }
+    if (format === 'xlsx') {
+      throw new Error('[LocalProxy] Pass your SheetJS module via LocalProxyConfig.xlsxModule to extract Excel workbooks locally (no server needed).')
+    }
+    throw new Error(`[LocalProxy] Document extraction (${format ?? 'unknown format'}) is not available in standalone mode. Connect a real proxy via ProxyClient — it extracts documents server-side.`)
+  }
+
+  /** @deprecated Use `extractDocument()`. */
   async extractPdf(_buffer: ArrayBuffer, _searchString?: string): Promise<{ text: string; pageCount: number }> {
     throw new Error('[LocalProxy] PDF extraction is not available in standalone mode. Connect a real proxy via ProxyClient — it extracts PDFs server-side (pdfplumber) for layout-accurate results.')
   }

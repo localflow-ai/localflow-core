@@ -258,6 +258,7 @@ export interface ApiProxyPayload {
 /** Structured payload emitted by LocalAssistant on 'data:llm' events.
  *  Contains categorical data only — no human-readable text or i18n strings. */
 export type LlmDataPayload =
-  | { kind: 'table'; query: string; dataset: string; columns: number }
-  | { kind: 'pdf';   query: string; dataset: string; pages: number   }
-  | { kind: 'text';  query: string; dataset: string                  }
+  | { kind: 'table';    query: string; dataset: string; columns: number }
+  | { kind: 'pdf';      query: string; dataset: string; pages: number   }
+  | { kind: 'document'; query: string; dataset: string; pages: number   }
+  | { kind: 'text';     query: string; dataset: string                  }
