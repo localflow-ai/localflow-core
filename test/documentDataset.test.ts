@@ -104,7 +104,8 @@ describe('local xlsx extraction (injected SheetJS module)', async () => {
     expect(res.documentMetadata).toEqual({ format: 'xlsx', pageNames: ['Sales', 'Notes'] })
     expect(res.text).toContain('## Page 1 — "Sales"')
     expect(res.text).toContain('Region | Amount | Date')
-    expect(res.text).toContain('North | 1200.5 | 2026-01-15')
+    // raw:false → cells render in their Excel display format (default date: m/d/yy)
+    expect(res.text).toContain('North | 1200.5 | 1/15/26')
     expect(res.text).toContain('## Page 2 — "Notes"')
   })
 

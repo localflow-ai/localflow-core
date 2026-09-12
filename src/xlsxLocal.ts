@@ -19,6 +19,7 @@ export interface XlsxModuleLike {
   }
   utils: {
     sheet_to_json(ws: unknown, opts?: Record<string, unknown>): unknown[]
+    decode_range?(ref: string): { s: { r: number; c: number }; e: { r: number; c: number } }
   }
 }
 
@@ -38,7 +39,10 @@ function cellText(v: unknown): string {
     if (v.getHours() === 0 && v.getMinutes() === 0 && v.getSeconds() === 0) return iso
     return `${iso} ${String(v.getHours()).padStart(2, '0')}:${String(v.getMinutes()).padStart(2, '0')}:${String(v.getSeconds()).padStart(2, '0')}`
   }
-  return String(v)
+  // One cell must stay one column of one line: newlines inside a cell would
+  // split the row, and a literal '|' would shift every column after it.
+  // ▲/▼ are conditional-formatting glyphs (noise for the model and parsers).
+  return String(v).replace(/[\r\n]+/g, ' ').replace(/\|/g, ' ').replace(/[▲▼]/g, '').replace(/\s+/g, ' ').trim()
 }
 
 /** Accent-insensitive, case-insensitive haystack — mirrors the proxy's fuzzy normalization. */
@@ -53,7 +57,28 @@ export function extractXlsxLocally(xlsxModule: unknown, buffer: ArrayBuffer, sea
   const wb = xlsxModule.read(new Uint8Array(buffer), { type: 'array', cellDates: true })
   const pageNames = wb.SheetNames
   const pages = pageNames.map((name, i) => {
-    const rows = xlsxModule.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null }) as unknown[][]
+    const ws = wb.Sheets[name] as Record<string, unknown>
+    // raw:false → the *displayed* strings (number formats, currency, %, dates),
+    // so the text reads like the document the user sees in Excel.
+    const rows = xlsxModule.utils.sheet_to_json(ws, { header: 1, raw: false, defval: null }) as unknown[][]
+
+    // Merged regions: exports often duplicate the value into every covered cell
+    // (and real merges only fill the anchor). Blank everything but the anchor so
+    // a banner spanning 9 columns appears once, not 9 times.
+    const merges = (ws['!merges'] ?? []) as { s: { r: number; c: number }; e: { r: number; c: number } }[]
+    const origin = xlsxModule.utils.decode_range && typeof ws['!ref'] === 'string'
+      ? xlsxModule.utils.decode_range(ws['!ref'] as string).s
+      : { r: 0, c: 0 }
+    for (const m of merges) {
+      for (let r = m.s.r; r <= m.e.r; r++) {
+        for (let c = m.s.c; c <= m.e.c; c++) {
+          if (r === m.s.r && c === m.s.c) continue
+          const row = rows[r - origin.r]
+          if (row && c - origin.c < row.length) row[c - origin.c] = null
+        }
+      }
+    }
+
     const lines: string[] = []
     let truncated = false
     for (let r = 0; r < rows.length; r++) {
