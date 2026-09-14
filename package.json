@@ -1,10 +1,10 @@
 {
   "name": "@localflow/core",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "engines": {
     "node": ">=20"
   },
-  "description": "Local-first data analysis with AI — only metadata reaches the model (the metadata-first protocol); it generates deterministic code that runs locally on your data",
+  "description": "Local-first data analysis with AI \u2014 only metadata reaches the model (the metadata-first protocol); it generates deterministic code that runs locally on your data",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",

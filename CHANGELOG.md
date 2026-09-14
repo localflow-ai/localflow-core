@@ -7,6 +7,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-09-14
+
 ### Added
 - **Word `.docx` support in `extractDocument()`** — `DocumentFormat` gains `'docx'`; zip containers are told apart by their entry names (`xl/workbook.xml` vs `word/document.xml`, other zip formats rejected). Word is extracted server-side like PDF (needs the proxy's `/common/extract-document`); the whole document is one "page" (paragraphs + tables in document order, tables as pipe rows). Legacy `.doc` is not supported.
 - **`Proxy.extractDocument(buffer, searchString?)`** — format-generic document extraction (PDF **and Excel `.xlsx`**), replacing the PDF-specific `extractPdf()`. The format is detected from the buffer's magic bytes (no type hint); returns `DocumentExtraction` `{ text, pageCount, documentMetadata? }` where `pageCount` counts PDF pages or workbook sheets and `documentMetadata` (`DocumentMetadata`) carries `format` and, for workbooks, `pageNames` (sheet names). PDF buffers ride the long-standing `/common/extract-pdf` endpoint (works against every deployed proxy); `.xlsx` needs a proxy with `/common/extract-document`.
@@ -73,7 +75,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Runtime-configurable proxy URL, persisted in `localStorage`.
 - Formula self-healing — `formulaHealingRetries` option; JS syntax errors are caught and silently retried before returning to the caller (default: 1).
 
-[Unreleased]: https://github.com/localflow-ai/localflow-core/compare/0.4.1...HEAD
+[Unreleased]: https://github.com/localflow-ai/localflow-core/compare/0.5.0...HEAD
+[0.5.0]: https://github.com/localflow-ai/localflow-core/compare/0.4.1...0.5.0
 [0.4.1]: https://github.com/localflow-ai/localflow-core/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/localflow-ai/localflow-core/compare/0.3.0...0.4.0
 [0.3.0]: https://github.com/localflow-ai/localflow-core/releases/tag/0.3.0
