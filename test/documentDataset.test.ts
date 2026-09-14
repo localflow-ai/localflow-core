@@ -7,16 +7,26 @@ function buf(bytes: number[]): ArrayBuffer {
   return new Uint8Array(bytes).buffer
 }
 
+function zipBufWithEntry(entryName: string): ArrayBuffer {
+  // PK\x03\x04 local header followed by the (uncompressed) entry name, as in a real zip
+  const name = Array.from(entryName).map(ch => ch.charCodeAt(0))
+  return buf([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, ...name])
+}
+
 const PDF_BUF = buf([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31])   // %PDF-1
-const XLSX_BUF = buf([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00])  // PK\x03\x04
+const XLSX_BUF = zipBufWithEntry('xl/workbook.xml')
+const DOCX_BUF = zipBufWithEntry('word/document.xml')
+const PPTX_BUF = zipBufWithEntry('ppt/presentation.xml')
 const TXT_BUF = buf([0x68, 0x65, 0x6c, 0x6c, 0x6f])          // hello
 
 describe('detectDocumentFormat', () => {
   it('detects PDF by %PDF magic bytes', () => {
     expect(detectDocumentFormat(PDF_BUF)).toBe('pdf')
   })
-  it('detects xlsx by zip magic bytes', () => {
+  it('disambiguates zip containers by entry names', () => {
     expect(detectDocumentFormat(XLSX_BUF)).toBe('xlsx')
+    expect(detectDocumentFormat(DOCX_BUF)).toBe('docx')
+    expect(detectDocumentFormat(PPTX_BUF)).toBe(null)  // unsupported zip format
   })
   it('returns null for unknown formats and short buffers', () => {
     expect(detectDocumentFormat(TXT_BUF)).toBe(null)
@@ -75,6 +85,7 @@ describe('LocalProxy.extractDocument', () => {
   it('throws a format-aware standalone error without an xlsxModule', async () => {
     const p = new LocalProxy()
     await expect(p.extractDocument(XLSX_BUF)).rejects.toThrow(/xlsxModule/)
+    await expect(p.extractDocument(DOCX_BUF)).rejects.toThrow(/docx.*standalone/s)
     await expect(p.extractDocument(TXT_BUF)).rejects.toThrow(/unknown format/)
   })
 })

@@ -147,10 +147,11 @@ export class ProxyClient implements Proxy {
       const { text, pageCount } = await this.extractPdf(buffer, searchString)
       return { text, pageCount, documentMetadata: { format: 'pdf' } }
     }
-    if (format === 'xlsx') {
-      // Local-first: with a host-provided SheetJS module the workbook is parsed
-      // in the browser and never leaves the device; the proxy is the fallback.
-      if (this._xlsxModule) return extractXlsxLocally(this._xlsxModule, buffer, searchString)
+    if (format === 'xlsx' || format === 'docx') {
+      // Local-first: with a host-provided SheetJS module a workbook is parsed
+      // in the browser and never leaves the device. Word (like PDF) is
+      // extracted server-side.
+      if (format === 'xlsx' && this._xlsxModule) return extractXlsxLocally(this._xlsxModule, buffer, searchString)
       if (!this.token) throw new Error('Not authenticated')
       const url = new URL(`${this.baseUrl}/common/extract-document`)
       if (searchString) url.searchParams.set('searchString', searchString)
@@ -173,10 +174,10 @@ export class ProxyClient implements Proxy {
       return {
         text: data.text ?? data.content ?? '',
         pageCount: data.pageCount ?? data.returnedPages ?? 0,
-        documentMetadata: { format: 'xlsx', ...data.documentMetadata },
+        documentMetadata: { format, ...data.documentMetadata },
       }
     }
-    throw new Error('Unsupported document format — supported: PDF (%PDF header) and Excel .xlsx (zip header).')
+    throw new Error('Unsupported document format — supported: PDF, Excel .xlsx and Word .docx. (Legacy .doc is not supported — save as .docx.)')
   }
 
   /** @deprecated Use `extractDocument()` — identical behavior for PDF buffers. */

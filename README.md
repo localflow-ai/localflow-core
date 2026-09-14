@@ -70,8 +70,9 @@ LocalFlow brings **local-first data analysis to AI**: your data stays on the dev
 | Operation | Data sent | Where |
 |-----------|-----------|-------|
 | Tabular analysis — code generation | Column headers + statistics | 🟠 LLM |
-| PDF extraction | Raw PDF bytes | 🔵 Proxy |
-| PDF analysis — code generation | Extracted document text | 🟠 LLM |
+| PDF / Word extraction | Raw document bytes | 🔵 Proxy |
+| Excel document extraction (with `xlsxModule`) | Nothing — extracted in-browser | 🟢 Browser |
+| Document analysis — code generation | Extracted document text | 🟠 LLM |
 | Analysis execution | Actual data | 🟢 Browser |
 | External API calls (optional) | Query parameters only | 🔵 Proxy |
 
@@ -245,10 +246,11 @@ const assistant = new LocalAssistant({ proxy, llm: { protocol: 'gemini' }, resul
 
 **Self-hosting:** for production use, run your own instance — see the [localflow-proxy](https://github.com/localflow-ai/localflow-proxy) repository for setup instructions.
 
-### Document extraction (PDF, Excel)
+### Document extraction (PDF, Excel, Word)
 
-The format is detected from the buffer's magic bytes — PDF and Excel `.xlsx`
-are supported, no type hint needed. **PDF** extraction runs server-side and
+The format is detected from the buffer's magic bytes — PDF, Excel `.xlsx` and
+Word `.docx` are supported, no type hint needed (legacy `.doc` is not —
+save as `.docx`). **PDF** extraction runs server-side and
 requires a proxy. **Excel** extraction runs **locally in the browser** when
 you pass your app's SheetJS module (`xlsxModule` option on `ProxyClient` /
 `LocalProxy`) — the workbook never leaves the device, standalone mode
@@ -666,7 +668,7 @@ try {
 | `callLLM` | Calls the LLM provider directly from the browser. For Gemini, uses `geminiApiKey` if no key is set and applies the rate limit. |
 | `getAvailableLLMs` | Returns `[]` — user configures the model directly via `LLMConfig`. |
 | `encryptMessage` / `decryptMessage` | No-ops — the key is stored and used as plain text |
-| `extractDocument` | Works for Excel `.xlsx` when `xlsxModule` is configured (fully in-browser); throws for PDF (needs a server-side proxy) |
+| `extractDocument` | Works for Excel `.xlsx` when `xlsxModule` is configured (fully in-browser); throws for PDF and Word (they need a server-side proxy) |
 | `extractPdf` | Throws — PDF extraction is not available in standalone mode |
 | `listObjectTypes` / `getObjectMetadata` / `getData` | Return empty results — no CRM access |
 | `connect` / `getSessionInfo` | No-ops — no session management |
@@ -713,7 +715,7 @@ const proxy = new ProxyClient(baseUrl, token?, { xlsxModule?: XLSX })
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `extractDocument(buffer, searchString?)` | `Promise<DocumentExtraction>` | Extract text from a document (PDF or Excel `.xlsx`, detected by magic bytes). Excel is extracted **locally in the browser** when `xlsxModule` was provided, else via the proxy; PDF always goes through the proxy. `documentMetadata` carries the format and, for workbooks, sheet names. `searchString` narrows to matching pages/sheets. |
+| `extractDocument(buffer, searchString?)` | `Promise<DocumentExtraction>` | Extract text from a document (PDF, Excel `.xlsx` or Word `.docx`, detected by magic bytes). Excel is extracted **locally in the browser** when `xlsxModule` was provided, else via the proxy; PDF always goes through the proxy. `documentMetadata` carries the format and, for workbooks, sheet names. `searchString` narrows to matching pages/sheets. |
 | `extractPdf(buffer, searchString?)` | `Promise<{ text, pageCount }>` | **Deprecated** — use `extractDocument()`. |
 
 ##### CRM

@@ -4,7 +4,7 @@ import type { ApiConfig, CrmObjectType } from './types'
 export type LLMProtocol = 'gemini' | 'openai' | 'anthropic' | 'ollama'
 
 /** Formats supported by `Proxy.extractDocument()` (detected by magic bytes). */
-export type DocumentFormat = 'pdf' | 'xlsx'
+export type DocumentFormat = 'pdf' | 'xlsx' | 'docx'
 
 /** Format-specific details of an extracted document. Most callers can ignore it. */
 export interface DocumentMetadata {
@@ -189,10 +189,11 @@ export interface Proxy {
   ): Promise<Response>
 
   /**
-   * Extract text from a document (PDF or Excel .xlsx). The format is detected
-   * from the buffer's magic bytes — no type hint needed. `searchString` narrows
-   * the result to matching pages (PDF, ±1 context page) or sheets (Excel).
-   * Not available in local mode.
+   * Extract text from a document (PDF, Excel .xlsx or Word .docx). The format
+   * is detected from the buffer's magic bytes — no type hint needed.
+   * `searchString` narrows the result to matching pages (PDF, ±1 context page)
+   * or sheets (Excel); a Word document is a single page. Not available in
+   * local mode (except Excel with a configured `xlsxModule`).
    */
   extractDocument(
     buffer: ArrayBuffer,
