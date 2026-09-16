@@ -153,3 +153,35 @@ describe('parseNum against real pdf-sample tokens', () => {
     expect(got).toBeCloseTo(refParse(token), 6)
   })
 })
+
+
+// ---------------------------------------------------------------------------
+// Sample-driven, Excel: every numeric cell of the xlsx samples as its DISPLAY
+// string (what extractXlsxLocally emits, whatever locale the workbook renders
+// in) paired with the cell's RAW value — ground truth from the file itself.
+// The parser must recover the raw magnitude. Percent cells may follow either
+// convention (true % format stores the fraction, literal-"%" formats store the
+// scaled number), so both readings are accepted. Tolerance covers display
+// rounding (a 0-decimal display rounds to the unit); real failure modes
+// (NaN, 100x/1000x separator errors) are orders of magnitude beyond it.
+// Fixture: test/generate-sample-tokens.mjs (git-ignored, private statements).
+// ---------------------------------------------------------------------------
+
+const pairsPath = join(here, 'fixtures', 'xlsx-cell-pairs.json')
+
+describe('parsers against real xlsx display strings (raw-value oracle)', () => {
+  if (!existsSync(pairsPath)) {
+    it.skip('fixture not present (run test/generate-sample-tokens.mjs)', () => {})
+    return
+  }
+  const pairs: { text: string; value: number }[] = JSON.parse(readFileSync(pairsPath, 'utf8'))
+  it('fixture has pairs', () => expect(pairs.length).toBeGreaterThan(0))
+  it.each(pairs.map(p => [p.text, p.value] as const))('recovers %j (raw %d)', (text, value) => {
+    const isPct = /%\s*$/.test(text)
+    const parsed = !isPct && /[€$£¤]/.test(text) ? parseMoney(text) : parseNum(text)
+    expect(parsed).not.toBeNaN()
+    const tol = 0.51 + Math.abs(value) * 1e-9
+    const ok = Math.abs(parsed - value) <= tol || (isPct && Math.abs(parsed - value * 100) <= tol)
+    if (!ok) expect.fail(`parsed ${parsed} from ${JSON.stringify(text)}, raw value ${value}`)
+  })
+})

@@ -52,3 +52,43 @@ const list = [...tokens].sort()
 mkdirSync(join(here, 'fixtures'), { recursive: true })
 writeFileSync(join(here, 'fixtures', 'sample-number-tokens.json'), JSON.stringify(list, null, 2) + '\n')
 console.log(`wrote ${list.length} distinct value tokens from pdf-samples`)
+
+// ---------------------------------------------------------------------------
+// Excel samples — two fixtures per concern (requires `npm run build` first,
+// the generator imports dist/xlsxLocal.js which has no runtime deps):
+//
+// 1. xlsx-cell-pairs.json — every numeric cell's DISPLAY string next to its
+//    RAW value, the ground-truth oracle for the parsers: whatever locale the
+//    workbook renders in, parseMoney/parseNum(display) must recover the raw
+//    magnitude (percent cells: raw x 100 — "%" formats store fractions).
+// 2. xlsx-local-baselines/<name>.txt — full extractXlsxLocally output, the
+//    local-extraction analog of the proxy's PDF baselines.
+// ---------------------------------------------------------------------------
+const XLSX = await import('xlsx')
+const { extractXlsxLocally } = await import('../dist/xlsxLocal.js')
+
+const pairs = []
+const xlsxFiles = readdirSync(samplesDir).filter((f) => f.endsWith('.xlsx'))
+mkdirSync(join(here, 'fixtures', 'xlsx-local-baselines'), { recursive: true })
+for (const f of xlsxFiles) {
+  const buf = readFileSync(join(samplesDir, f))
+  const wb = XLSX.read(buf, { type: 'buffer' })
+  for (const name of wb.SheetNames) {
+    const ws = wb.Sheets[name]
+    for (const addr of Object.keys(ws)) {
+      if (addr.charAt(0) === '!') continue
+      const cell = ws[addr]
+      // numeric cells with a rendered string; skip dates/times (not parser targets)
+      if (cell.t !== 'n' || typeof cell.w !== 'string' || /[/:]/.test(cell.w)) continue
+      // Same sanitation extractXlsxLocally applies — pairs must mirror what
+      // formulas actually receive (▲/▼ glyphs stripped, whitespace collapsed).
+      const text = cell.w.replace(/[\r\n]+/g, ' ').replace(/\|/g, ' ').replace(/[▲▼]/g, '').replace(/\s+/g, ' ').trim()
+      if (!/\d/.test(text)) continue
+      pairs.push({ text, value: cell.v })
+    }
+  }
+  const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
+  writeFileSync(join(here, 'fixtures', 'xlsx-local-baselines', f + '.txt'), extractXlsxLocally(XLSX, ab).text + '\n')
+}
+writeFileSync(join(here, 'fixtures', 'xlsx-cell-pairs.json'), JSON.stringify(pairs, null, 2) + '\n')
+console.log(`wrote ${pairs.length} display/raw cell pairs and ${xlsxFiles.length} local-extraction baseline(s) from xlsx samples`)

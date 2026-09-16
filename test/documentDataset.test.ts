@@ -2,6 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { detectDocumentFormat } from '../src/documentFormat'
 import { LocalAssistant } from '../src/LocalAssistant'
 import { LocalProxy } from '../src/LocalProxy'
+import { extractXlsxLocally } from '../src/xlsxLocal'
+import { readFileSync, readdirSync, existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
 
 function buf(bytes: number[]): ArrayBuffer {
   return new Uint8Array(bytes).buffer
@@ -143,4 +147,34 @@ describe('local xlsx extraction (injected SheetJS module)', async () => {
     const p = new LocalProxy({ xlsxModule: { not: 'sheetjs' } })
     await expect(p.extractDocument(workbookBuffer())).rejects.toThrow(/SheetJS/)
   })
+})
+
+
+// ---------------------------------------------------------------------------
+// Local-extraction baselines: full extractXlsxLocally output of every xlsx in
+// localflow-proxy/pdf-samples, snapshot like the proxy's PDF baselines — any
+// change to the local extractor surfaces here. Re-bless after an INTENDED
+// change with: node test/generate-sample-tokens.mjs  (git-ignored fixtures).
+// ---------------------------------------------------------------------------
+
+const here = dirname(fileURLToPath(import.meta.url))
+const xlsxBaselinesDir = join(here, 'fixtures', 'xlsx-local-baselines')
+const xlsxSamplesDir = join(here, '..', '..', 'localflow-proxy', 'pdf-samples')
+
+describe('extractXlsxLocally against sample baselines', async () => {
+  if (!existsSync(xlsxBaselinesDir)) {
+    it.skip('baselines not present (run test/generate-sample-tokens.mjs)', () => {})
+    return
+  }
+  const XLSX = await import('xlsx')
+  for (const baseline of readdirSync(xlsxBaselinesDir).filter(f => f.endsWith('.txt'))) {
+    const sample = join(xlsxSamplesDir, baseline.replace(/\.txt$/, ''))
+    it(`matches baseline for ${baseline}`, () => {
+      if (!existsSync(sample)) return  // sample removed — stale baseline, regenerate
+      const buf = readFileSync(sample)
+      const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
+      const actual = extractXlsxLocally(XLSX, ab).text + '\n'
+      expect(actual).toBe(readFileSync(join(xlsxBaselinesDir, baseline), 'utf8'))
+    })
+  }
 })
