@@ -28,6 +28,21 @@ describe('parseNum', () => {
     ['3.65', 3.65],                // dot decimal
     ['-0.53', -0.53],              // negative
     ['12,5%', 12.5],               // trailing percent
+    // --- occidental matrix (US/UK, DE/ES/IT, CH) ---
+    ['1,730.00', 1730],            // US comma thousands + dot decimal (SheetJS display)
+    ['195,307.47', 195307.47],
+    ['1,234,567.89', 1234567.89],  // US millions
+    ['1.234,56', 1234.56],         // DE dot thousands + comma decimal
+    ['1.234.567,89', 1234567.89],
+    ['1,234,567', 1234567],        // multiple same separators → thousands
+    ['1.234.567', 1234567],
+    ['31.00', 31],                 // SheetJS-formatted quantity
+    ['0.754', 0.754],              // sub-1 quantity, 3 decimals
+    ['751,169', 751.169],          // ambiguous 3-trailing-digits: quantities read DECIMAL
+    ['2.23 %', 2.23],              // percent with space (SheetJS display)
+    ['-14.81 %', -14.81],
+    ['342.46 %', 342.46],
+    ['65.6184953', 65.6184953],    // long decimals
   ])('parses %j → %d', (input, expected) => {
     expect(parseNum(input)).toBeCloseTo(expected, 6)
   })
@@ -57,6 +72,18 @@ describe('parseMoney', () => {
     ["6'751'498", 6751498],        // Swiss apostrophe
     ['5,23', 5.23],
     ['0,00', 0],
+    // --- occidental matrix ---
+    ['195,307.47 €', 195307.47],   // US-formatted euro (SheetJS display string)
+    ['$1,234.56', 1234.56],        // leading currency symbol
+    ['EUR 1.234,56', 1234.56],     // leading currency code + DE format
+    ['1,234,567.89', 1234567.89],
+    ['1.234.567,89', 1234567.89],
+    ["1'234.56 CHF", 1234.56],
+    ['1,234 €', 1234],             // ambiguous 3-trailing-digits: money reads THOUSANDS
+    ['1.234 €', 1234],
+    ['1234,567', 1234.567],        // >3-digit lead group: invalid grouping → decimal
+    ['(1 234,56)', -1234.56],      // accounting negative
+    ['0,17', 0.17],
   ])('parses %j → %d', (input, expected) => {
     expect(parseMoney(input)).toBeCloseTo(expected, 2)
   })
@@ -69,6 +96,8 @@ describe('parseMoney', () => {
     'CARTE X3403',                 // transaction description
     'VIR RECU 7141686480',         // reference
     'ACTIONS',                     // section label
+    '18,51 %',                     // a percentage is not an amount
+    '2.23 %',
     '',
   ])('rejects %j → NaN', (input) => {
     expect(parseMoney(input)).toBeNaN()
