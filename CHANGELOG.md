@@ -7,6 +7,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-09-16
+
 ### Fixed
 - **`parseMoney` / `parseNum` are now universal across occidental number formats** — previously hardcoded for French/Swiss shapes (space/apostrophe thousands, decimal comma), so US/UK- and German-formatted values broke: `parseMoney("195,307.47 €")` → NaN (position silently dropped), `parseNum("1,730.00")` → 1.73 (1000× off). This surfaced when local Excel extraction started emitting each workbook's own display strings. Resolution is structural, not locale-based: space-family/apostrophes are always thousands; with both `,` and `.` the last one is the decimal separator; a repeated separator is thousands; a single one is decimal — except the one genuinely ambiguous shape (exactly 3 trailing digits, e.g. `1,234`), which quantities read as a decimal (`751,169` UNT) and money reads as thousands (`1,234 €`, no occidental currency has 3 decimals). Also new: percent handling in `parseNum` (`"2,23 %"` → 2.23, value as displayed), leading currency symbols/codes (`$1,234.56`, `EUR 1.234,56`) and accounting negatives (`(1 234,56)`) in `parseMoney`, which still rejects percentages. Verified against 2,338 real-statement tokens plus a full occidental test matrix.
 
@@ -78,7 +80,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Runtime-configurable proxy URL, persisted in `localStorage`.
 - Formula self-healing — `formulaHealingRetries` option; JS syntax errors are caught and silently retried before returning to the caller (default: 1).
 
-[Unreleased]: https://github.com/localflow-ai/localflow-core/compare/0.5.0...HEAD
+[Unreleased]: https://github.com/localflow-ai/localflow-core/compare/0.5.1...HEAD
+[0.5.1]: https://github.com/localflow-ai/localflow-core/compare/0.5.0...0.5.1
 [0.5.0]: https://github.com/localflow-ai/localflow-core/compare/0.4.1...0.5.0
 [0.4.1]: https://github.com/localflow-ai/localflow-core/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/localflow-ai/localflow-core/compare/0.3.0...0.4.0
