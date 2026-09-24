@@ -170,6 +170,7 @@ ${activeDatasetType === 'pdf' ? `# ACTIVE DATASET IS A PDF DOCUMENT
 Tab: "${activeDatasetName ?? ''}" (${pdfPageCount} page${pdfPageCount !== 1 ? 's' : ''})
 The full document text is included below in this system prompt (section "PDF DOCUMENT TEXT") — use it to understand the content and structure.
 In formulas: use \`pdfText\` (pre-extracted string) split by '\\n' to process line by line. Pages are separated by "## Page N" headers.
+A '•' is a marker glyph from the original document (section start, fee/footnote marker, legend dot) — the document itself may define its meaning ("lines marked • are …"); usable as an anchor, never part of a value.
 Do NOT use \`data\` (empty). \`pdfData\` + \`pdfjsLib\` are available for raw positional extraction if needed.` : `# ACTIVE DATASET IS A DOCUMENT (Excel workbook)
 Tab: "${activeDatasetName ?? ''}" (${pdfPageCount} sheet${pdfPageCount !== 1 ? 's' : ''}${documentMetadata?.pageNames?.length ? ` — ${documentMetadata.pageNames.map(n => `"${n}"`).join(', ')}` : ''})
 The full document text is included below in this system prompt (section "DOCUMENT TEXT") — use it to understand the content and structure.
