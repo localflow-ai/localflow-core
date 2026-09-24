@@ -43,6 +43,7 @@ describe('parseNum', () => {
     ['-14.81 %', -14.81],
     ['342.46 %', 342.46],
     ['65.6184953', 65.6184953],    // long decimals
+    ['• 8,00', 8],                 // neutralized symbol-font marker sharing the cell
   ])('parses %j → %d', (input, expected) => {
     expect(parseNum(input)).toBeCloseTo(expected, 6)
   })
@@ -83,6 +84,7 @@ describe('parseMoney', () => {
     ['1.234 €', 1234],
     ['1234,567', 1234.567],        // >3-digit lead group: invalid grouping → decimal
     ['(1 234,56)', -1234.56],      // accounting negative
+    ['• 44,00', 44],               // neutralized symbol-font marker sharing the cell
     ['0,17', 0.17],
   ])('parses %j → %d', (input, expected) => {
     expect(parseMoney(input)).toBeCloseTo(expected, 2)

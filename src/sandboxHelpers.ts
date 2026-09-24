@@ -38,7 +38,7 @@ export function parseMoney(s: unknown): number {
     if (/^\(.*\)$/.test(str)) { sign = -1; str = str.slice(1, -1).trim(); }  // accounting negative (1 234,56)
     if (/^[+-]/.test(str)) { if (str.charAt(0) === '-') sign = -sign; str = str.slice(1).trim(); }
     str = str
-      .replace(/[€$£₹¥¤*†‡°]/g, '')                               // currency symbols anywhere (¤ = euro mis-encoded as Latin-1 0xA4)
+      .replace(/[€$£₹¥¤*†‡°•]/g, '')                              // currency symbols + marker glyphs anywhere (¤ = euro mis-encoded as Latin-1 0xA4; • = neutralized symbol-font marker)
       .replace(/^[A-Za-z]{1,4}\.?\s+/, '')                        // leading currency code (EUR 1 234,56)
       .replace(/\s*[A-Za-z]{1,4}\.?\s*$/, '')                     // trailing unit/currency code (EUR, CHF, UNT, F.)
       .trim();
@@ -81,7 +81,7 @@ export function parseNum(s: unknown): number {
     var sign = 1;
     if (/^[+-]/.test(str)) { sign = str.charAt(0) === '-' ? -1 : 1; str = str.slice(1).trim(); }
     str = str
-      .replace(/[%‰]/g, '')                                       // percent signs — value stays as displayed
+      .replace(/[%‰•]/g, '')                                      // percent signs + marker glyphs — value stays as displayed
       .replace(/\s*[A-Za-z]{1,4}\.?\s*$/, '')                     // trailing unit code (UNT, EUR…)
       .trim();
     if (!/\d/.test(str) || /[A-Za-z]/.test(str)) return NaN;
