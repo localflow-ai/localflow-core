@@ -7,6 +7,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+- **Local Excel extraction: a literal `|` in a cell is replaced with `/`** (was a space) — `|` is the reserved column separator, so content `|` must not reach the output or `splitCols()` mis-splits the row. `/` preserves the source's visual-separator intent and matches the proxy's PDF/docx extractors, so the convention is uniform whichever path extracted the text.
+
 ## [0.5.1] — 2026-09-16
 
 ### Fixed

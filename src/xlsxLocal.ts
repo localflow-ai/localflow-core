@@ -40,9 +40,10 @@ function cellText(v: unknown): string {
     return `${iso} ${String(v.getHours()).padStart(2, '0')}:${String(v.getMinutes()).padStart(2, '0')}:${String(v.getSeconds()).padStart(2, '0')}`
   }
   // One cell must stay one column of one line: newlines inside a cell would
-  // split the row, and a literal '|' would shift every column after it.
+  // split the row, and a literal '|' would shift every column after it (replaced
+  // with '/', matching the PDF/docx extractors — preserves separator intent).
   // ▲/▼ are conditional-formatting glyphs (noise for the model and parsers).
-  return String(v).replace(/[\r\n]+/g, ' ').replace(/\|/g, ' ').replace(/[▲▼]/g, '').replace(/\s+/g, ' ').trim()
+  return String(v).replace(/[\r\n]+/g, ' ').replace(/\|/g, '/').replace(/[▲▼]/g, '').replace(/\s+/g, ' ').trim()
 }
 
 /** Accent-insensitive, case-insensitive haystack — mirrors the proxy's fuzzy normalization. */
