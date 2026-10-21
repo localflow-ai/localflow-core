@@ -5,7 +5,7 @@ import type {
   AnalysisMatchHook, AnalysisMatchContext, AnalysisMatchResult,
 } from './types'
 import type { Proxy, LLMRequest, LLMMessage, DocumentMetadata } from './Proxy'
-import { parseMoney, parseNum, splitCols } from './sandboxHelpers'
+import { detectNumberFormat, parseMoney, parseNum, splitCols } from './sandboxHelpers'
 
 const DEFAULT_SANDBOX_PERMISSIONS = [
   'allow-scripts',
@@ -665,6 +665,10 @@ window.addEventListener('message', function(e) {
 var parseMoney = ${parseMoney.toString()};
 var parseNum = ${parseNum.toString()};
 var splitCols = ${splitCols.toString()};
+var detectNumberFormat = ${detectNumberFormat.toString()};
+// Calibrate the ambiguous-number rule on THIS document's proven convention
+// (rule 5 in sandboxHelpers) — parseMoney/parseNum read this global.
+var __numberFormat = detectNumberFormat(pdfText);
 function __runFormula() {
   (async () => {
     const data = ${dataJson};

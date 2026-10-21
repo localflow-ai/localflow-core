@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { parseMoney, parseNum, splitCols } from '../src/sandboxHelpers'
+import { detectNumberFormat, parseMoney, parseNum, splitCols } from '../src/sandboxHelpers'
 
 const here = dirname(fileURLToPath(import.meta.url))
 
@@ -185,5 +185,55 @@ describe('parsers against real xlsx display strings (raw-value oracle)', () => {
     const tol = 0.51 + Math.abs(value) * 1e-9
     const ok = Math.abs(parsed - value) <= tol || (isPct && Math.abs(parsed - value * 100) <= tol)
     if (!ok) expect.fail(`parsed ${parsed} from ${JSON.stringify(text)}, raw value ${value}`)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Rule 5 — document calibration of the ambiguous 3-trailing-digit shape
+// ---------------------------------------------------------------------------
+
+describe('detectNumberFormat + calibrated parsers', () => {
+  const US_DOC = 'Total 101,247.86 | 1,325.50 | 16,769.62 USD'
+  const EU_DOC = 'Valorisation 1 234,56 EUR | 11 014,00 | 2 345,67'
+
+  afterEach(() => { delete (globalThis as Record<string, unknown>).__numberFormat })
+
+  it('detects us / eu / null', () => {
+    expect(detectNumberFormat(US_DOC)).toBe('us')
+    expect(detectNumberFormat(EU_DOC)).toBe('eu')
+    expect(detectNumberFormat('no numbers here')).toBe(null)
+    expect(detectNumberFormat('ambiguous 1,138 only')).toBe(null)
+  })
+
+  it('us doc: "1,138" is 1138 for BOTH parsers (shares, not 1.138)', () => {
+    globalThis.__numberFormat = 'us'
+    expect(parseNum('1,138')).toBe(1138)
+    expect(parseMoney('1,138')).toBe(1138)
+    // and a dot stays decimal, overriding the money bias
+    expect(parseMoney('1.234')).toBe(1.234)
+    expect(parseNum('1.234')).toBe(1.234)
+  })
+
+  it('eu doc: "11,014" stays 11.014 units; "1.138" is 1138', () => {
+    globalThis.__numberFormat = 'eu'
+    expect(parseNum('11,014')).toBe(11.014)
+    expect(parseMoney('11,014')).toBe(11.014)
+    expect(parseNum('1.138')).toBe(1138)
+    expect(parseMoney('1.138')).toBe(1138)
+  })
+
+  it('uncalibrated: legacy rule 4 unchanged (mirror behavior)', () => {
+    expect(parseNum('1,138')).toBe(1.138)
+    expect(parseMoney('1,138')).toBe(1138)
+  })
+
+  it('calibration never touches unambiguous shapes', () => {
+    for (const fmt of ['us', 'eu', null] as const) {
+      globalThis.__numberFormat = fmt
+      expect(parseMoney('1,234.56')).toBe(1234.56)
+      expect(parseMoney('1.234,56')).toBe(1234.56)
+      expect(parseNum('88,97')).toBe(88.97)
+      expect(parseNum("1'234.56")).toBe(1234.56)
+    }
   })
 })

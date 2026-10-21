@@ -23,9 +23,52 @@
 //      keep the decimal reading (3-decimal unit counts are real: 751,169 UNT),
 //      while parseMoney reads thousands (no occidental currency displays three
 //      decimals, so "1,234 €" is 1234).
+//   5. DOCUMENT CALIBRATION overrides rule 4: when the surrounding document
+//      proves its convention (detectNumberFormat() finds unambiguous
+//      two-separator numbers like "101,247.86" or "1.234,56"), BOTH parsers
+//      follow it on the ambiguous shape — a US statement's "1,138" quantity is
+//      1138 shares, a FR statement's "11,014" is 11.014 fund units. The sandbox
+//      sets the global __numberFormat from the active pdfText; headless runners
+//      can set globalThis.__numberFormat = detectNumberFormat(text) themselves.
+//      Without evidence (null), rule 4 applies unchanged.
 // Percent/permille signs are stripped in parseNum (value stays as displayed:
 // "2,23 %" → 2.23 — scaling is the formula's business); parseMoney still
 // rejects them (a percentage is not an amount).
+
+// Document-level calibration channel (rule 5). Set by the sandbox bootstrap
+// (from the active pdfText) or by a headless runner; absent = uncalibrated.
+declare global {
+  // eslint-disable-next-line no-var
+  var __numberFormat: 'us' | 'eu' | null | undefined
+}
+
+/**
+ * Detect a document's number convention from unambiguous evidence (numbers
+ * carrying BOTH a thousands separator and a decimal part). Returns 'us'
+ * (comma/apostrophe/space thousands + dot decimal), 'eu' (dot/apostrophe/space
+ * thousands + comma decimal), or null when the text proves neither.
+ * Self-contained (injected into the sandbox via toString()).
+ */
+export function detectNumberFormat(text: unknown): 'us' | 'eu' | null {
+  try {
+    var t = String(text || '');
+    var us =
+      (t.match(/\d,\d{3}\.\d/g) || []).length +                     // 1,234.56
+      (t.match(/\d,\d{3},\d{3}/g) || []).length +                   // 1,234,567
+      (t.match(/\d['’]\d{3}\.\d/g) || []).length +             // 1'234.56 (CH)
+      (t.match(/\d[\u0020\u00a0\u202f\u2009]\d{3}\.\d/g) || []).length; // 1 234.56
+    var eu =
+      (t.match(/\d\.\d{3},\d/g) || []).length +                     // 1.234,56
+      (t.match(/\d\.\d{3}\.\d{3}/g) || []).length +                 // 1.234.567
+      (t.match(/\d['’]\d{3},\d/g) || []).length +             // 1'234,56
+      (t.match(/\d[\u0020\u00a0\u202f\u2009]\d{3},\d/g) || []).length; // 1 234,56 (FR)
+    if (us > eu) return 'us';
+    if (eu > us) return 'eu';
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 /** Parse a monetary column value. Returns NaN for anything that isn't a clean amount. */
 export function parseMoney(s: unknown): number {
@@ -52,10 +95,16 @@ export function parseMoney(s: unknown): number {
         ? norm.replace(/\./g, '').replace(/,/g, '.')              // 1.234.567,89 (EU)
         : norm.replace(/,/g, '');                                 // 1,234,567.89 (US)
     } else if (lastComma !== -1 || lastDot !== -1) {
-      var parts = norm.split(lastComma !== -1 ? ',' : '.');
+      var sep = lastComma !== -1 ? ',' : '.';
+      var parts = norm.split(sep);
+      var fmt = typeof __numberFormat !== 'undefined' ? __numberFormat : null;
+      var thousandsShape = parts.length === 2 && parts[1].length === 3 && parts[0].length >= 1 && parts[0].length <= 3 && parts[0].charAt(0) !== '0';
       if (parts.length > 2) {
         num = parts.join('');                                     // 1,234,567 / 1.234.567 → thousands
-      } else if (parts[1].length === 3 && parts[0].length >= 1 && parts[0].length <= 3 && parts[0].charAt(0) !== '0') {
+      } else if (thousandsShape && fmt !== null) {
+        // Document calibration (rule 5): follow the PROVEN convention.
+        num = (fmt === 'us') === (sep === ',') ? parts[0] + parts[1] : parts[0] + '.' + parts[1];
+      } else if (thousandsShape) {
         num = parts[0] + parts[1];                                // money bias: "1,234" / "1.234" → 1234
       } else {
         num = parts[0] + '.' + parts[1];                          // decimal
@@ -94,11 +143,21 @@ export function parseNum(s: unknown): number {
         ? norm.replace(/\./g, '').replace(/,/g, '.')              // 1.234.567,89 (EU)
         : norm.replace(/,/g, '');                                 // 1,234,567.89 (US)
     } else if (lastComma !== -1 || lastDot !== -1) {
-      var parts = norm.split(lastComma !== -1 ? ',' : '.');
-      // Single separator = decimal (incl. the ambiguous 3-trailing-digit shape:
-      // quantities like "751,169 UNT" genuinely carry three decimals); several
-      // occurrences = thousands.
-      num = parts.length > 2 ? parts.join('') : parts[0] + '.' + parts[1];
+      var sep = lastComma !== -1 ? ',' : '.';
+      var parts = norm.split(sep);
+      var fmt = typeof __numberFormat !== 'undefined' ? __numberFormat : null;
+      var thousandsShape = parts.length === 2 && parts[1].length === 3 && parts[0].length >= 1 && parts[0].length <= 3 && parts[0].charAt(0) !== '0';
+      if (parts.length > 2) {
+        num = parts.join('');                                     // several occurrences = thousands
+      } else if (thousandsShape && fmt !== null) {
+        // Document calibration (rule 5): a proven-US doc's "1,138" is 1138
+        // shares; a proven-EU doc's "11,014" stays 11.014 fund units.
+        num = (fmt === 'us') === (sep === ',') ? parts[0] + parts[1] : parts[0] + '.' + parts[1];
+      } else {
+        // No document evidence: single separator = decimal (3-decimal unit
+        // counts are real: "751,169 UNT").
+        num = parts[0] + '.' + parts[1];
+      }
     } else {
       num = norm;
     }
