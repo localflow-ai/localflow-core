@@ -10,6 +10,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 ## [0.5.2] — 2026-10-22
 
 ### Fixed
+- **The ambiguous 3-trailing-digit number shape (`1,138`) is now calibrated on the document's proven convention.** `parseNum`/`parseMoney` resolved it with fixed mirror biases (quantity → decimal, money → thousands), so one document type always lost — a US statement's quantities `1,052`/`3,559` read as ~1-5 units. New rule: `detectNumberFormat(text)` (sandbox-internal) extracts the convention from unambiguous two-separator evidence (`101,247.86` proves US, `1.234,56` proves EU); the sandbox bootstrap calibrates both parsers on the active document via the `__numberFormat` global. No evidence → prior behavior, so all pre-existing cases are unchanged.
 - **Local Excel extraction: a literal `|` in a cell is replaced with `/`** (was a space) — `|` is the reserved column separator, so content `|` must not reach the output or `splitCols()` mis-splits the row. `/` preserves the source's visual-separator intent and matches the proxy's PDF/docx extractors, so the convention is uniform whichever path extracted the text.
 
 ## [0.5.1] — 2026-09-16
