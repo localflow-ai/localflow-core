@@ -7,6 +7,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-10-22
+
 ### Fixed
 - **Local Excel extraction: a literal `|` in a cell is replaced with `/`** (was a space) — `|` is the reserved column separator, so content `|` must not reach the output or `splitCols()` mis-splits the row. `/` preserves the source's visual-separator intent and matches the proxy's PDF/docx extractors, so the convention is uniform whichever path extracted the text.
 
@@ -83,7 +85,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Runtime-configurable proxy URL, persisted in `localStorage`.
 - Formula self-healing — `formulaHealingRetries` option; JS syntax errors are caught and silently retried before returning to the caller (default: 1).
 
-[Unreleased]: https://github.com/localflow-ai/localflow-core/compare/0.5.1...HEAD
+[Unreleased]: https://github.com/localflow-ai/localflow-core/compare/0.5.2...HEAD
+[0.5.2]: https://github.com/localflow-ai/localflow-core/compare/0.5.1...0.5.2
 [0.5.1]: https://github.com/localflow-ai/localflow-core/compare/0.5.0...0.5.1
 [0.5.0]: https://github.com/localflow-ai/localflow-core/compare/0.4.1...0.5.0
 [0.4.1]: https://github.com/localflow-ai/localflow-core/compare/0.4.0...0.4.1
